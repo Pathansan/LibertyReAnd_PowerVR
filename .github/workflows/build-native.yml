@@ -37,13 +37,19 @@ jobs:
           echo "Initializing XenosRecomp submodules..."
           git submodule update --init --depth 1 tools/XenosRecomp
           (cd tools/XenosRecomp && git submodule update --init --depth 1 thirdparty/fmt thirdparty/zstd thirdparty/dxc-bin thirdparty/smol-v thirdparty/xxHash)
-          chmod +x tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/* tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/* || true
-          sudo cp -a tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/* /usr/lib/x86_64-linux-gnu/ || true
-          sudo cp -a tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/* /usr/lib/ || true
-          cp -a tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/* tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/ || true
+          echo "Fetching official modern Microsoft DXC release for Linux x64..."
+          curl -sL https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2609/linux_dxc_2026_09_28.x86_x64.tar.gz -o /tmp/dxc.tar.gz
+          mkdir -p /tmp/dxc-official
+          tar -xzf /tmp/dxc.tar.gz -C /tmp/dxc-official
+          cp -f /tmp/dxc-official/bin/dxc tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxc-linux
+          cp -f /tmp/dxc-official/lib/libdxcompiler.so* tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/
+          cp -f /tmp/dxc-official/lib/libdxil.so* tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/
+          chmod +x tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxc-linux
+          sudo cp -a /tmp/dxc-official/lib/* /usr/lib/x86_64-linux-gnu/ || true
           sudo ldconfig || true
-          echo "Testing dxc-linux compile of ps_bink.hlsl..."
-          tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxc-linux -spirv -fspv-target-env=vulkan1.0 -HV 2021 -T ps_6_0 -E shaderMain -all-resources-bound -fvk-use-dx-layout -O3 -Qstrip_debug -WX -I LibertyRecompLib/shader_overrides -I LibertyRecompLib/shader_overrides/bink -DXENOS_RECOMP_PIXEL_SHADER -DGTA4_RECOMP -Fo /tmp/test_bink.spv LibertyRecompLib/shader_overrides/bink/ps_bink.hlsl && echo "ps_bink.hlsl test compile SUCCESS!" || echo "ps_bink.hlsl test compile failed (exit code $?)"
+
+          echo "Testing modern dxc-linux compile of ps_bink.hlsl..."
+          tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxc-linux -spirv -fspv-target-env=vulkan1.0 -HV 2021 -T ps_6_0 -E shaderMain -all-resources-bound -fvk-use-dx-layout -O3 -Qstrip_debug -WX -I LibertyRecompLib/shader_overrides -I LibertyRecompLib/shader_overrides/bink -DXENOS_RECOMP_PIXEL_SHADER -DGTA4_RECOMP -Fo /tmp/test_bink.spv LibertyRecompLib/shader_overrides/bink/ps_bink.hlsl && echo "ps_bink.hlsl test compile SUCCESS!" || { echo "ps_bink.hlsl test compile failed (exit code $?)"; exit 1; }
           
           echo "Initializing msdf-atlas-gen..."
           git submodule update --init --depth 1 thirdparty/msdf-atlas-gen
