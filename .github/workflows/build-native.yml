@@ -34,14 +34,15 @@ jobs:
           set -e
           echo "Initializing XenosRecomp submodules..."
           git submodule update --init --depth 1 tools/XenosRecomp
-          (cd tools/XenosRecomp && git submodule update --init --depth 1 thirdparty/fmt thirdparty/zstd thirdparty/dxc-bin)
+          (cd tools/XenosRecomp && git submodule update --init --depth 1 thirdparty/fmt thirdparty/zstd thirdparty/dxc-bin thirdparty/smol-v thirdparty/xxHash)
           
           echo "Initializing msdf-atlas-gen..."
           git submodule update --init --depth 1 thirdparty/msdf-atlas-gen
 
           echo "Initializing RexGlue thirdparty submodules..."
-          for sub in cli11 libmspack FFmpeg tomlplusplus simde xxHash spdlog fmt snappy utfcpp imgui sdl3 volk vulkan-headers vulkan-memory-allocator spirv-headers spirv-tools glslang; do
-            git submodule update --init --depth 1 "glue/rexglue-sdk-main/thirdparty/$sub"
+          for sub in $(git config --file .gitmodules --get-regexp path | awk '{print $2}' | grep '^glue/rexglue-sdk-main/thirdparty/'); do
+            echo "Initializing $sub..."
+            git submodule update --init --depth 1 "$sub"
           done
 
       - name: Set up Android NDK r29
@@ -77,15 +78,22 @@ jobs:
             -DLIBERTY_RECOMP_EMBEDDED_ASSETS=ON \
             -DLIBERTY_RECOMP_VULKAN=ON \
             -DCMAKE_BUILD_TYPE=Release > /tmp/cmake.log 2>&1 || {
-              err=$(tail -n 25 /tmp/cmake.log | tr '\r\n' '  ')
+              err=$(tail -n 35 /tmp/cmake.log | tr '\r\n' '  ')
               echo "::error title=CMakeConfigError::$err"
               cat /tmp/cmake.log
               exit 1
             }
+          cat /tmp/cmake.log
 
       - name: Build rexgpu-gta4-native target
         run: |
-          cmake --build build --target rexgpu-gta4-native --parallel $(nproc)
+          cmake --build build --target rexgpu-gta4-native --parallel $(nproc) > /tmp/build.log 2>&1 || {
+            err=$(tail -n 35 /tmp/build.log | tr '\r\n' '  ')
+            echo "::error title=CMakeBuildError::$err"
+            cat /tmp/build.log
+            exit 1
+          }
+          cat /tmp/build.log
 
       - name: Locate librexgpu-gta4-native.so
         run: |
