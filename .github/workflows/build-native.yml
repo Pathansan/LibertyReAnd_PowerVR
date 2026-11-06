@@ -64,23 +64,56 @@ jobs:
 
       - name: Configure CMake for Android
         run: |
-          echo "NDK: $ANDROID_NDK"
-          cmake --preset android-release
+          echo "Discovered NDK: $ANDROID_NDK"
+          ls -la "$ANDROID_NDK/build/cmake/android.toolchain.cmake"
+          cmake -B build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-26 \
+            -DANDROID_STL=c++_static \
+            -DLIBERTY_RECOMP_TARGET_PLATFORM=android \
+            -DLIBERTY_RECOMP_ANDROID_RUNTIME_ASSETS=ON \
+            -DLIBERTY_RECOMP_EMBEDDED_ASSETS=ON \
+            -DLIBERTY_RECOMP_VULKAN=ON \
+            -DCMAKE_BUILD_TYPE=Release 2>&1 | tee /tmp/cmake_conf.log || {
+              echo "=== CMAKE FAILED ==="
+              cat /tmp/cmake_conf.log
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git checkout -B debug-log
+              cp /tmp/cmake_conf.log cmake_conf.log
+              git add cmake_conf.log
+              git commit -m "Debug cmake configure log"
+              git push -f origin debug-log
+              exit 1
+            }
 
       - name: Build rexgpu-gta4-native target
         run: |
-          cmake --build --preset android-release --target rexgpu-gta4-native --parallel $(nproc)
+          cmake --build build --target rexgpu-gta4-native --parallel $(nproc) 2>&1 | tee /tmp/cmake_build.log || {
+            echo "=== BUILD FAILED ==="
+            cat /tmp/cmake_build.log
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git checkout -B debug-log
+            cp /tmp/cmake_build.log cmake_build.log
+            git add cmake_build.log
+            git commit -m "Debug cmake build log"
+            git push -f origin debug-log
+            exit 1
+          }
 
       - name: Locate librexgpu-gta4-native.so
         run: |
           mkdir -p output
-          find out/build/android-release -name "librexgpu-gta4-native.so" -exec ls -lh {} +
-          find out/build/android-release -name "librexgpu-gta4-native.so" -exec cp -v {} output/ \;
+          find build -name "librexgpu-gta4-native.so" -exec ls -lh {} +
+          find build -name "librexgpu-gta4-native.so" -exec cp -v {} output/ \;
 
       - name: Push .so to binary-artifacts branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin
           git checkout -B binary-artifacts
           mkdir -p dist/arm64-v8a
           cp output/librexgpu-gta4-native.so dist/arm64-v8a/
