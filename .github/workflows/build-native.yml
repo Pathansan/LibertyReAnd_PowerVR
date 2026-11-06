@@ -32,10 +32,13 @@ jobs:
       - name: Initialize required submodules
         run: |
           set -e
-          echo "Initializing XenosRecomp and dxc-bin..."
+          echo "Initializing XenosRecomp submodules..."
           git submodule update --init --depth 1 tools/XenosRecomp
-          (cd tools/XenosRecomp && git submodule update --init --depth 1 thirdparty/dxc-bin)
+          (cd tools/XenosRecomp && git submodule update --init --depth 1 thirdparty/fmt thirdparty/zstd thirdparty/dxc-bin)
           
+          echo "Initializing msdf-atlas-gen..."
+          git submodule update --init --depth 1 thirdparty/msdf-atlas-gen
+
           echo "Initializing RexGlue thirdparty submodules..."
           for sub in cli11 libmspack FFmpeg tomlplusplus simde xxHash spdlog fmt snappy utfcpp imgui sdl3 volk vulkan-headers vulkan-memory-allocator spirv-headers spirv-tools glslang; do
             git submodule update --init --depth 1 "glue/rexglue-sdk-main/thirdparty/$sub"
