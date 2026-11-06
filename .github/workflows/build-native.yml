@@ -5,31 +5,30 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
+permissions: write-all
 
 jobs:
   build-android-native:
     name: Build librexgpu-gta4-native.so (arm64-v8a)
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 25
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install build tools and host dependencies
+      - name: Install host dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build glslang-tools spirv-tools libvulkan-dev libzstd-dev build-essential curl zip unzip
-          python3 -m pip install 'cmake>=3.29' ninja
+          sudo DEBIAN_FRONTEND=noninteractive apt-get update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libvulkan-dev libzstd-dev ninja-build
 
       - name: Initialize required submodules
         run: |
@@ -66,13 +65,11 @@ jobs:
       - name: Configure CMake for Android
         run: |
           echo "NDK: $ANDROID_NDK"
-          cmake --preset android-release 2>&1 | tee cmake_configure.log
-          cat cmake_configure.log >> "$GITHUB_STEP_SUMMARY"
+          cmake --preset android-release
 
       - name: Build rexgpu-gta4-native target
         run: |
-          cmake --build --preset android-release --target rexgpu-gta4-native --parallel $(nproc) 2>&1 | tee cmake_build.log
-          cat cmake_build.log >> "$GITHUB_STEP_SUMMARY"
+          cmake --build --preset android-release --target rexgpu-gta4-native --parallel $(nproc)
 
       - name: Locate librexgpu-gta4-native.so
         run: |
@@ -84,7 +81,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin
           git checkout -B binary-artifacts
           mkdir -p dist/arm64-v8a
           cp output/librexgpu-gta4-native.so dist/arm64-v8a/
