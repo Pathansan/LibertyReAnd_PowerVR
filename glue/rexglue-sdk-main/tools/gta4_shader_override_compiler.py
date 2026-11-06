@@ -373,13 +373,14 @@ def _run_tool(command: Sequence[str], environment: dict[str, str] | None = None)
         command,
         check=False,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         text=True,
+        errors="replace",
         env=environment,
     )
     if result.returncode:
         rendered = " ".join(command)
-        raise ManifestError(f"shader tool failed ({rendered}):\n{result.stdout}")
+        raise ManifestError(f"shader tool failed (code={result.returncode}) ({rendered}):\n[STDOUT]:\n{result.stdout}\n[STDERR]:\n{result.stderr}")
 
 
 def _compiler_environment(library_path: str | None) -> dict[str, str]:

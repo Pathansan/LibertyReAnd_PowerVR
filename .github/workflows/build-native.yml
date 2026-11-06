@@ -37,8 +37,13 @@ jobs:
           echo "Initializing XenosRecomp submodules..."
           git submodule update --init --depth 1 tools/XenosRecomp
           (cd tools/XenosRecomp && git submodule update --init --depth 1 thirdparty/fmt thirdparty/zstd thirdparty/dxc-bin thirdparty/smol-v thirdparty/xxHash)
-          chmod +x tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/* || true
-          LD_LIBRARY_PATH="$(pwd)/tools/XenosRecomp/thirdparty/dxc-bin/lib/x64:$LD_LIBRARY_PATH" ./tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxc-linux --help > /dev/null && echo "dxc-linux verified OK!" || { echo "dxc-linux verification failed:"; ldd ./tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxc-linux; }
+          chmod +x tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/* tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/* || true
+          sudo cp -a tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/* /usr/lib/x86_64-linux-gnu/ || true
+          sudo cp -a tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/* /usr/lib/ || true
+          cp -a tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/* tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/ || true
+          sudo ldconfig || true
+          echo "Testing dxc-linux compile of ps_bink.hlsl..."
+          tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxc-linux -spirv -fspv-target-env=vulkan1.0 -HV 2021 -T ps_6_0 -E shaderMain -all-resources-bound -fvk-use-dx-layout -O3 -Qstrip_debug -WX -I LibertyRecompLib/shader_overrides -I LibertyRecompLib/shader_overrides/bink -DXENOS_RECOMP_PIXEL_SHADER -DGTA4_RECOMP -Fo /tmp/test_bink.spv LibertyRecompLib/shader_overrides/bink/ps_bink.hlsl && echo "ps_bink.hlsl test compile SUCCESS!" || echo "ps_bink.hlsl test compile failed (exit code $?)"
           
           echo "Initializing msdf-atlas-gen..."
           git submodule update --init --depth 1 thirdparty/msdf-atlas-gen
