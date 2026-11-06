@@ -73,7 +73,12 @@ jobs:
             -DLIBERTY_RECOMP_ANDROID_RUNTIME_ASSETS=ON \
             -DLIBERTY_RECOMP_EMBEDDED_ASSETS=ON \
             -DLIBERTY_RECOMP_VULKAN=ON \
-            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_BUILD_TYPE=Release > /tmp/cmake.log 2>&1 || {
+              err=$(tail -n 25 /tmp/cmake.log | tr '\r\n' '  ')
+              echo "::error title=CMakeConfigError::$err"
+              cat /tmp/cmake.log
+              exit 1
+            }
 
       - name: Build rexgpu-gta4-native target
         run: |
