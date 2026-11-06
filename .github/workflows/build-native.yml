@@ -113,8 +113,9 @@ jobs:
       - name: Locate librexgpu-gta4-native.so
         run: |
           mkdir -p output
-          find build -name "librexgpu-gta4-native.so" -exec ls -lh {} +
-          find build -name "librexgpu-gta4-native.so" -exec cp -v {} output/ \;
+          find . -name "librexgpu-gta4-native.so" -exec ls -lh {} +
+          find . -name "librexgpu-gta4-native.so" -exec cp -v {} output/ \;
+          test -f output/librexgpu-gta4-native.so || { echo "Binary not found!"; exit 1; }
 
       - name: Upload librexgpu-gta4-native.so artifact
         uses: actions/upload-artifact@v4
