@@ -153,6 +153,7 @@ class Gta4NativeGraphicsSystem final : public system::IGraphicsSystem {
     uint32_t location = 0;
     NativeVertexNumericType numeric_type = NativeVertexNumericType::kFloat;
     uint32_t component_count = 0;
+    uint32_t original_location = 0;
 
     bool operator==(const NativeVertexInput&) const = default;
   };

@@ -10,6 +10,7 @@
 #include "native_pipeline_stats.h"
 #include "native_gpu_counters.h"
 #include "native_spirv_descriptor_remap.h"
+#include "native_spirv_vertex_remap.h"
 #include "native_spirv_loop_watchdog.h"
 #include "native_spirv_legacy_mul.h"
 #include "native_vertex_cache.h"
@@ -2637,7 +2638,7 @@ VertexPayloadConversionCounts ConvertGuestVertexPayload(uint8_t* destination, co
     }
     const auto shader_input = std::find_if(
         shader.vertex_inputs.begin(), shader.vertex_inputs.end(), [&element](const auto& input) {
-          return input.location == ConvertVertexUsageToLocation(element.usage, element.usage_index);
+          return input.original_location == ConvertVertexUsageToLocation(element.usage, element.usage_index);
         });
     if (shader_input == shader.vertex_inputs.end()) {
       continue;
@@ -8220,7 +8221,7 @@ bool Gta4NativeGraphicsSystem::ReflectVertexInputs(const std::vector<uint32_t>& 
     if (!component_count || component_count > 4) {
       return false;
     }
-    inputs.push_back({locations[variable.id], numeric_type, component_count});
+    inputs.push_back({locations[variable.id], numeric_type, component_count, locations[variable.id]});
   }
 
   std::sort(inputs.begin(), inputs.end(),
@@ -8555,6 +8556,33 @@ void Gta4NativeGraphicsSystem::RegisterShader(const RegisterShaderCommand& comma
     RemapSpirvDrawDescriptorSets(stock_late_spirv);
     apply_loop_watchdog(stock_early_spirv);
     apply_loop_watchdog(stock_late_spirv);
+    std::unordered_map<uint32_t, uint32_t> vertex_loc_remap;
+    std::vector<NativeVertexInput> stock_vertex_inputs;
+    if (command.stage == ShaderStage::kVertex) {
+      if (!ReflectVertexInputs(stock_early_spirv, stock_vertex_inputs)) {
+        REXLOG_ERROR("gta4-native: failed to reflect stock vertex inputs for shader {}",
+                     cache_entry->filename);
+        return;
+      }
+      const auto& vertex_limits = vulkan_device->properties();
+      bool needs_remap = false;
+      for (const auto& inp : stock_vertex_inputs) {
+        if (inp.location >= vertex_limits.maxVertexInputAttributes) {
+          needs_remap = true;
+          break;
+        }
+      }
+      if (needs_remap) {
+        for (uint32_t idx = 0; idx < stock_vertex_inputs.size(); ++idx) {
+          vertex_loc_remap[stock_vertex_inputs[idx].original_location] = idx;
+          stock_vertex_inputs[idx].location = idx;
+        }
+        RemapSpirvVertexInputLocations(stock_early_spirv, vertex_loc_remap);
+        if (!stock_late_spirv.empty()) {
+          RemapSpirvVertexInputLocations(stock_late_spirv, vertex_loc_remap);
+        }
+      }
+    }
     const uint32_t constant_bank = command.stage == ShaderStage::kVertex ? 0 : 1;
     uint32_t upload_constant_bytes =
         AnalyzeSpirvConstantRange(stock_early_spirv.data(), stock_early_spirv.size()).bytes[constant_bank];
@@ -8632,15 +8660,8 @@ void Gta4NativeGraphicsSystem::RegisterShader(const RegisterShaderCommand& comma
         i += count;
       }
     }
-    if (command.stage == ShaderStage::kVertex &&
-        !ReflectVertexInputs(stock_early_spirv, resource->vertex_inputs)) {
-      if (stock_late_module) {
-        profile::CpuCall(profile::CpuOp::kDriverDestruction, [&] { return dfn.vkDestroyShaderModule(device, stock_late_module, nullptr); });
-      }
-      profile::CpuCall(profile::CpuOp::kDriverDestruction, [&] { return dfn.vkDestroyShaderModule(device, stock_early_module, nullptr); });
-      REXLOG_ERROR("gta4-native: failed to reflect stock vertex inputs for shader {}",
-                   cache_entry->filename);
-      return;
+    if (command.stage == ShaderStage::kVertex) {
+      resource->vertex_inputs = std::move(stock_vertex_inputs);
     }
     if (command.stage == ShaderStage::kVertex) {
       uint64_t signature = 0x9E3779B97F4A7C15ull;
@@ -8737,9 +8758,24 @@ void Gta4NativeGraphicsSystem::RegisterShader(const RegisterShaderCommand& comma
       }
       if (!override_rejection && command.stage == ShaderStage::kVertex) {
         std::vector<NativeVertexInput> override_inputs;
-        if (!ReflectVertexInputs(override_early_spirv, override_inputs) ||
-            override_inputs != resource->vertex_inputs) {
+        if (!ReflectVertexInputs(override_early_spirv, override_inputs)) {
           override_rejection = "vertex-interface";
+        } else {
+          if (!vertex_loc_remap.empty()) {
+            for (auto& inp : override_inputs) {
+              auto it = vertex_loc_remap.find(inp.original_location);
+              if (it != vertex_loc_remap.end()) {
+                inp.location = it->second;
+              }
+            }
+            RemapSpirvVertexInputLocations(override_early_spirv, vertex_loc_remap);
+            if (!override_late_spirv.empty()) {
+              RemapSpirvVertexInputLocations(override_late_spirv, vertex_loc_remap);
+            }
+          }
+          if (override_inputs != resource->vertex_inputs) {
+            override_rejection = "vertex-interface";
+          }
         }
       }
 
@@ -22184,7 +22220,7 @@ VkPipeline Gta4NativeGraphicsSystem::GetOrCreatePipeline(
     const VertexElement* matching_element = nullptr;
     for (const VertexElement& element : state.vertex_declaration_resource->elements) {
       if (ConvertVertexUsageToLocation(element.usage, element.usage_index) ==
-          shader_input.location) {
+          shader_input.original_location) {
         matching_element = &element;
         break;
       }
@@ -24124,7 +24160,7 @@ bool Gta4NativeGraphicsSystem::GetRequiredVertexStreams(
     const VertexElement* matching_element = nullptr;
     for (const VertexElement& element : state.vertex_declaration_resource->elements) {
       if (ConvertVertexUsageToLocation(element.usage, element.usage_index) ==
-          shader_input.location) {
+          shader_input.original_location) {
         matching_element = &element;
         break;
       }

@@ -81,7 +81,7 @@ bool HasVertexPayloadCorrections(const Declaration& declaration, const Shader& s
   for (const auto& element : declaration.elements) {
     if (element.stream != stream) continue;
     const auto input = std::find_if(shader.vertex_inputs.begin(), shader.vertex_inputs.end(),
-        [&](const auto& value) { return value.location == ConvertVertexUsageToLocation(element.usage, element.usage_index); });
+        [&](const auto& value) { return value.original_location == ConvertVertexUsageToLocation(element.usage, element.usage_index); });
     if (input == shader.vertex_inputs.end()) continue;
     using NumericType = std::remove_cvref_t<decltype(input->numeric_type)>;
     if (GetVertexElement16BitComponentCount(element.type) || element.type == 0x1A2187 ||
@@ -114,7 +114,7 @@ VertexPayloadConversionCounts ConvertGuestVertexPayload(uint8_t* destination, co
     }
     const auto shader_input = std::find_if(
         shader.vertex_inputs.begin(), shader.vertex_inputs.end(), [&element](const auto& input) {
-          return input.location == ConvertVertexUsageToLocation(element.usage, element.usage_index);
+          return input.original_location == ConvertVertexUsageToLocation(element.usage, element.usage_index);
         });
     if (shader_input == shader.vertex_inputs.end()) {
       continue;
