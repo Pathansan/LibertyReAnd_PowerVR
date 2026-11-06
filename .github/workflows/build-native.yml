@@ -109,14 +109,16 @@ jobs:
           find build -name "librexgpu-gta4-native.so" -exec ls -lh {} +
           find build -name "librexgpu-gta4-native.so" -exec cp -v {} output/ \;
 
-      - name: Push .so to binary-artifacts branch
+      - name: Push .so to binary-artifacts branch and create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin
           git checkout -B binary-artifacts
           mkdir -p dist/arm64-v8a
           cp output/librexgpu-gta4-native.so dist/arm64-v8a/
           git add -f dist/arm64-v8a/librexgpu-gta4-native.so
-          git commit -m "Automated build: librexgpu-gta4-native.so (${{ github.sha }})"
-          git push -f origin binary-artifacts
+          git commit -m "Automated build: librexgpu-gta4-native.so (${{ github.sha }})" || true
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" binary-artifacts || true
+          gh release create v-pvr-fix output/librexgpu-gta4-native.so --clobber --title "PowerVR Fix" --notes "PowerVR vertex input location remap build" || true
