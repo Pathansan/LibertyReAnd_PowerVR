@@ -12,13 +12,12 @@ jobs:
   build-android-native:
     name: Build librexgpu-gta4-native.so (arm64-v8a)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 1
 
       - name: Set up Python
@@ -31,6 +30,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build glslang-tools spirv-tools libvulkan-dev libzstd-dev build-essential curl zip unzip
           python3 -m pip install 'cmake>=3.29' ninja
+
+      - name: Initialize required submodules
+        run: |
+          set -e
+          echo "Initializing XenosRecomp and dxc-bin..."
+          git submodule update --init --depth 1 tools/XenosRecomp
+          (cd tools/XenosRecomp && git submodule update --init --depth 1 thirdparty/dxc-bin)
+          
+          echo "Initializing RexGlue thirdparty submodules..."
+          for sub in cli11 libmspack FFmpeg tomlplusplus simde xxHash spdlog fmt snappy utfcpp imgui sdl3 volk vulkan-headers vulkan-memory-allocator spirv-headers spirv-tools glslang; do
+            git submodule update --init --depth 1 "glue/rexglue-sdk-main/thirdparty/$sub"
+          done
 
       - name: Set up Android NDK r29
         run: |
@@ -46,9 +57,9 @@ jobs:
           echo "NDK installed at: $NDK_DIR"
           ls -d "$NDK_DIR"
 
-      - name: Initialize dependencies and apply patches
+      - name: Prepare dependencies and apply patches
         run: |
-          python3 tools/setup_repo.py
+          python3 tools/setup_repo.py --prepare-only
           find tools -name "dxc-linux" -exec chmod +x {} + || true
 
       - name: Configure CMake for Android arm64-v8a
