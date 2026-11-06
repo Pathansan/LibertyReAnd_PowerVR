@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-android-native:
@@ -46,48 +46,48 @@ jobs:
       - name: Set up Android NDK r29
         run: |
           set -e
-          NDK_DIR="$HOME/android-ndk-r29"
           echo "Setting up Android NDK r29..."
-          curl -L -o /tmp/ndk-r29.zip https://dl.google.com/android/repository/android-ndk-r29-linux.zip
-          unzip -q /tmp/ndk-r29.zip -d "$HOME"
-          rm -f /tmp/ndk-r29.zip
-          mv "$HOME"/android-ndk-r29* "$NDK_DIR" || true
-          echo "ANDROID_NDK=$NDK_DIR" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_ROOT=$NDK_DIR" >> "$GITHUB_ENV"
-          echo "NDK installed at: $NDK_DIR"
-          ls -d "$NDK_DIR"
+          mkdir -p /tmp/ndk
+          curl -L -o /tmp/ndk/ndk-r29.zip https://dl.google.com/android/repository/android-ndk-r29-linux.zip
+          sudo unzip -q /tmp/ndk/ndk-r29.zip -d /opt
+          rm -rf /tmp/ndk
+          NDK_PATH=$(find /opt -maxdepth 2 -name "source.properties" -exec dirname {} \;)
+          echo "Discovered NDK at: $NDK_PATH"
+          test -f "$NDK_PATH/build/cmake/android.toolchain.cmake"
+          echo "ANDROID_NDK=$NDK_PATH" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$NDK_PATH" >> "$GITHUB_ENV"
 
       - name: Prepare dependencies and apply patches
         run: |
           python3 tools/setup_repo.py --prepare-only
           find tools -name "dxc-linux" -exec chmod +x {} + || true
+          mkdir -p tools/local_game_payload
 
-      - name: Configure CMake for Android arm64-v8a
+      - name: Configure CMake for Android
         run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE=toolchains/android.cmake \
-            -DANDROID_NDK="$ANDROID_NDK" \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-26 \
-            -DANDROID_STL=c++_static \
-            -DLIBERTY_RECOMP_TARGET_PLATFORM=android \
-            -DLIBERTY_RECOMP_ANDROID_RUNTIME_ASSETS=ON \
-            -DLIBERTY_RECOMP_EMBEDDED_ASSETS=ON \
-            -DCMAKE_BUILD_TYPE=Release
+          echo "NDK: $ANDROID_NDK"
+          cmake --preset android-release 2>&1 | tee cmake_configure.log
+          cat cmake_configure.log >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build rexgpu-gta4-native target
         run: |
-          cmake --build build --target rexgpu-gta4-native --parallel $(nproc)
+          cmake --build --preset android-release --target rexgpu-gta4-native --parallel $(nproc) 2>&1 | tee cmake_build.log
+          cat cmake_build.log >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Locate and prepare librexgpu-gta4-native.so
+      - name: Locate librexgpu-gta4-native.so
         run: |
           mkdir -p output
-          find build -name "librexgpu-gta4-native.so" -exec ls -lh {} +
-          find build -name "librexgpu-gta4-native.so" -exec cp -v {} output/ \;
+          find out/build/android-release -name "librexgpu-gta4-native.so" -exec ls -lh {} +
+          find out/build/android-release -name "librexgpu-gta4-native.so" -exec cp -v {} output/ \;
 
-      - name: Upload librexgpu-gta4-native.so artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: librexgpu-gta4-native-arm64-v8a
-          path: output/librexgpu-gta4-native.so
-          retention-days: 7
+      - name: Push .so to binary-artifacts branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin
+          git checkout -B binary-artifacts
+          mkdir -p dist/arm64-v8a
+          cp output/librexgpu-gta4-native.so dist/arm64-v8a/
+          git add -f dist/arm64-v8a/librexgpu-gta4-native.so
+          git commit -m "Automated build: librexgpu-gta4-native.so (${{ github.sha }})"
+          git push -f origin binary-artifacts
