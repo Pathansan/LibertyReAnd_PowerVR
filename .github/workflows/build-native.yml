@@ -27,7 +27,7 @@ jobs:
       - name: Install host dependencies
         run: |
           sudo DEBIAN_FRONTEND=noninteractive apt-get update -y
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libvulkan-dev libzstd-dev ninja-build
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libvulkan-dev libzstd-dev ninja-build spirv-tools glslang-tools
 
       - name: Initialize required submodules
         run: |
@@ -35,6 +35,7 @@ jobs:
           echo "Initializing XenosRecomp submodules..."
           git submodule update --init --depth 1 tools/XenosRecomp
           (cd tools/XenosRecomp && git submodule update --init --depth 1 thirdparty/fmt thirdparty/zstd thirdparty/dxc-bin thirdparty/smol-v thirdparty/xxHash)
+          chmod +x tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/* || true
           
           echo "Initializing msdf-atlas-gen..."
           git submodule update --init --depth 1 thirdparty/msdf-atlas-gen
