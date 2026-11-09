@@ -642,14 +642,12 @@ public class LibertyActivity extends SDLActivity {
 
     static final String EXTRA_SHOW_FPS = "extra_show_fps";
 
-    public static native float nativeGetGameFps();
-
     private void setupFpsOverlay() {
         boolean showFps = true;
         Intent intent = getIntent();
         if (intent != null && intent.hasExtra(EXTRA_SHOW_FPS)) {
             showFps = intent.getBooleanExtra(EXTRA_SHOW_FPS, true);
-        } else {
+        } else if (mArguments != null) {
             for (String arg : mArguments) {
                 if ("--show_fps=false".equalsIgnoreCase(arg.trim()) || "--no_fps".equalsIgnoreCase(arg.trim())) {
                     showFps = false;
@@ -667,8 +665,9 @@ public class LibertyActivity extends SDLActivity {
         fpsView.setPadding(18, 8, 18, 8);
 
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0xAA111111);
-        bg.setCornerRadius(12);
+        bg.setColor(0xCC111111);
+        bg.setCornerRadius(14f);
+        bg.setStroke(2, 0x4439FF14);
         fpsView.setBackground(bg);
 
         RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(
@@ -683,22 +682,27 @@ public class LibertyActivity extends SDLActivity {
             mLayout.addView(fpsView);
         }
 
-        final Handler handler = new Handler(Looper.getMainLooper());
-        final Runnable updateTask = new Runnable() {
+        android.view.Choreographer.getInstance().postFrameCallback(new android.view.Choreographer.FrameCallback() {
+            private int frameCount = 0;
+            private long lastReportNanos = 0;
+
             @Override
-            public void run() {
-                try {
-                    float fps = nativeGetGameFps();
-                    if (fps > 0.0f) {
-                        fpsView.setText(String.format(Locale.US, "%.1f FPS", fps));
-                    }
-                } catch (UnsatisfiedLinkError ignored) {
+            public void doFrame(long frameTimeNanos) {
+                if (lastReportNanos == 0) {
+                    lastReportNanos = frameTimeNanos;
+                }
+                frameCount++;
+                long elapsed = frameTimeNanos - lastReportNanos;
+                if (elapsed >= 500_000_000L) {
+                    float currentFps = (float) frameCount * 1_000_000_000.0f / (float) elapsed;
+                    fpsView.setText(String.format(Locale.US, "%.1f FPS", currentFps));
+                    frameCount = 0;
+                    lastReportNanos = frameTimeNanos;
                 }
                 if (!isFinishing() && !isDestroyed()) {
-                    handler.postDelayed(this, 500);
+                    android.view.Choreographer.getInstance().postFrameCallback(this);
                 }
             }
-        };
-        handler.postDelayed(updateTask, 1000);
+        });
     }
 }

@@ -179,14 +179,8 @@ jobs:
           echo "Aligning APK (4-byte boundary)..."
           zipalign -p -f 4 unaligned.apk aligned.apk
 
-          echo "Generating signing keystore..."
-          keytool -genkeypair -v -keystore /tmp/signing.jks -alias liberty_powervr \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android -keypass android \
-            -dname "CN=LibertyRecomp, OU=PowerVR, O=LibertyReAnd, C=US"
-
-          echo "Signing APK with v2 and v3 signatures..."
-          apksigner sign --ks /tmp/signing.jks \
+          echo "Signing APK with consistent keystore (v2 and v3 signatures)..."
+          apksigner sign --ks os/android/app/release.keystore \
             --ks-pass pass:android \
             --ks-key-alias liberty_powervr \
             --key-pass pass:android \
@@ -207,7 +201,10 @@ jobs:
 
       - name: Upload APK to GitHub Release (on tags only)
         if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            LibertyRecomp-PowerVR.apk
+            output/librexgpu-gta4-native.so
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload ${{ github.ref_name }} LibertyRecomp-PowerVR.apk --clobber || true
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
