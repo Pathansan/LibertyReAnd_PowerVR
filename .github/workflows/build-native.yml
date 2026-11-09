@@ -92,6 +92,7 @@ jobs:
             -DLIBERTY_RECOMP_ANDROID_RUNTIME_ASSETS=ON \
             -DLIBERTY_RECOMP_EMBEDDED_ASSETS=ON \
             -DLIBERTY_RECOMP_VULKAN=ON \
+            -DREXGLUE_ENABLE_TRACY=OFF \
             -DCMAKE_BUILD_TYPE=Release > /tmp/cmake.log 2>&1 || {
               err=$(tail -n 35 /tmp/cmake.log | tr '\r\n' '  ')
               echo "::error title=CMakeConfigError::$err"
@@ -116,6 +117,8 @@ jobs:
           find . -name "librexgpu-gta4-native.so" -exec ls -lh {} +
           find . -name "librexgpu-gta4-native.so" -exec cp -v {} output/ \;
           test -f output/librexgpu-gta4-native.so || { echo "Binary not found!"; exit 1; }
+          $ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-unneeded output/librexgpu-gta4-native.so || true
+          ls -lh output/librexgpu-gta4-native.so
 
       - name: Upload librexgpu-gta4-native.so artifact
         uses: actions/upload-artifact@v4
