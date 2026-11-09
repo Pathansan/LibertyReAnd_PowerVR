@@ -21,3 +21,6 @@
 
 # In-game top-left FPS monitor
 --show_fps=true
+
+# CPU core pinning: keep busy Xenon guest recompilation and render threads on big/mid CPU cores
+--android_pin_hot_threads=true

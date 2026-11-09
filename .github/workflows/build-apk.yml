@@ -168,6 +168,13 @@ jobs:
                           if apk_payload_idx != -1:
                               dex[apk_payload_idx:apk_payload_idx+9] = b'\x00' * 9
                               print(f"Blanked APKVISION string payload at offset {apk_payload_idx}")
+                          # Enable Sustained Performance Mode by default (in-app, without requiring ADB)
+                          pat_sustained = b'\x1a\x00\xe4\x0a\x12\x01\x6e\x30\x90\x00\x03\x01\x0a\x03\x38\x03\x2f\x00'
+                          idx_sus = dex.find(pat_sustained)
+                          if idx_sus != -1:
+                              rep_sus = b'\x1a\x00\xe4\x0a\x12\x11\x6e\x30\x90\x00\x03\x01\x0a\x03\x00\x00\x00\x00'
+                              dex[idx_sus:idx_sus+len(pat_sustained)] = rep_sus
+                              print(f"Configured Sustained Performance Mode to default ON at offset {idx_sus}")
                           # 3. Recalculate DEX SHA-1 signature and Adler32 checksum
                           dex[12:32] = hashlib.sha1(dex[32:]).digest()
                           dex[8:12] = (zlib.adler32(dex[12:]) & 0xffffffff).to_bytes(4, 'little')

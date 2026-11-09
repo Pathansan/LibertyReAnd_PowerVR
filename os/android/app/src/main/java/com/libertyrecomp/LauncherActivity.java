@@ -1095,7 +1095,7 @@ public class LauncherActivity extends Activity {
         android.widget.CheckBox sustained = styledCheck("Sustained performance mode",
                 "Asks Android for steady clocks the device can hold without throttling "
                         + "(where supported). Cooler, but the peak speed may be lower.",
-                perf.getBoolean(PERF_SUSTAINED, false));
+                perf.getBoolean(PERF_SUSTAINED, true));
         panel.addView(sustained, matchWrap(dp(4)));
         android.widget.CheckBox thermalGuard = styledCheck("Thermal guard",
                 "Lowers the draw distance before the device starts throttling and restores it "
@@ -1236,7 +1236,7 @@ public class LauncherActivity extends Activity {
                 intent.putExtra(LibertyActivity.EXTRA_HALF_DRAW_DISTANCE,
                         perf.getBoolean(PERF_HALF_DRAW_DISTANCE, false));
                 intent.putExtra(LibertyActivity.EXTRA_GPU_TURBO, perf.getBoolean(PERF_GPU_TURBO, false));
-                intent.putExtra(LibertyActivity.EXTRA_SUSTAINED, perf.getBoolean(PERF_SUSTAINED, false));
+                intent.putExtra(LibertyActivity.EXTRA_SUSTAINED, perf.getBoolean(PERF_SUSTAINED, true));
                 intent.putExtra(LibertyActivity.EXTRA_THERMAL_GUARD,
                         perf.getBoolean(PERF_THERMAL_GUARD, false));
                 intent.putExtra(LibertyActivity.EXTRA_SAFE_MODE, perf.getBoolean(PERF_SAFE_MODE, false));

@@ -100,14 +100,20 @@ public class LibertyActivity extends SDLActivity {
         // A controller-driven game sends no touch events for minutes at a time.
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setupFpsOverlay();
+        // Prioritize the game thread for display and rendering
+        try {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY);
+        } catch (Throwable ignored) {}
+
         // Steady clocks the device can hold, instead of peaks followed by
-        // throttling (only where the device supports it).
+        // throttling (only where the device supports it). Defaults to true on modern devices.
         Intent intent = getIntent();
-        if (intent != null && intent.getBooleanExtra(EXTRA_SUSTAINED, false)) {
+        boolean enableSustained = intent == null || intent.getBooleanExtra(EXTRA_SUSTAINED, true);
+        if (enableSustained) {
             android.os.PowerManager power = (android.os.PowerManager) getSystemService(POWER_SERVICE);
             boolean supported = power != null && power.isSustainedPerformanceModeSupported();
             if (supported) getWindow().setSustainedPerformanceMode(true);
-            android.util.Log.w("LibertyRecomp", "sustained performance mode: "
+            android.util.Log.i("LibertyRecomp", "sustained performance mode: "
                     + (supported ? "on" : "not supported by this device"));
         }
     }
