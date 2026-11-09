@@ -1,0 +1,186 @@
+name: Build Android APK (PowerVR Patched)
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_apk_url:
+        description: 'URL of the base APK to patch'
+        required: false
+        default: 'https://github.com/Pathansan/LibertyReAnd_PowerVR/releases/download/v0.5.9.3-powervr/liberty_patched.apk'
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions: write-all
+
+jobs:
+  build-apk:
+    name: Build & Package LibertyRecomp PowerVR APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install host dependencies
+        run: |
+          sudo DEBIAN_FRONTEND=noninteractive apt-get update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libvulkan-dev libzstd-dev ninja-build spirv-tools glslang-tools \
+            libncurses6 libtinfo6 zipalign apksigner zip unzip curl
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/libtinfo.so.6 /usr/lib/x86_64-linux-gnu/libtinfo.so.5 || true
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/libncursesw.so.6 /usr/lib/x86_64-linux-gnu/libncurses.so.5 || true
+
+      - name: Initialize required submodules
+        run: |
+          set -e
+          echo "Initializing XenosRecomp submodules..."
+          git submodule update --init --depth 1 tools/XenosRecomp
+          (cd tools/XenosRecomp && git submodule update --init --depth 1 thirdparty/fmt thirdparty/zstd thirdparty/dxc-bin thirdparty/smol-v thirdparty/xxHash)
+          
+          echo "Fetching official modern Microsoft DXC release for Linux x64..."
+          curl -sL https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2609/linux_dxc_2026_09_28.x86_x64.tar.gz -o /tmp/dxc.tar.gz
+          mkdir -p /tmp/dxc-official
+          tar -xzf /tmp/dxc.tar.gz -C /tmp/dxc-official
+          cp -f /tmp/dxc-official/bin/dxc tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxc-linux
+          cp -f /tmp/dxc-official/lib/libdxcompiler.so* tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/
+          cp -f /tmp/dxc-official/lib/libdxil.so* tools/XenosRecomp/thirdparty/dxc-bin/lib/x64/
+          chmod +x tools/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxc-linux
+          sudo cp -a /tmp/dxc-official/lib/* /usr/lib/x86_64-linux-gnu/ || true
+          sudo ldconfig || true
+
+          echo "Initializing msdf-atlas-gen..."
+          git submodule update --init --depth 1 thirdparty/msdf-atlas-gen
+
+          echo "Initializing RexGlue thirdparty submodules..."
+          for sub in $(git config --file .gitmodules --get-regexp path | awk '{print $2}' | grep '^glue/rexglue-sdk-main/thirdparty/'); do
+            echo "Initializing $sub..."
+            git submodule update --init --depth 1 "$sub"
+          done
+
+      - name: Set up Android NDK r29
+        run: |
+          set -e
+          echo "Setting up Android NDK r29..."
+          mkdir -p /tmp/ndk
+          curl -L -o /tmp/ndk/ndk-r29.zip https://dl.google.com/android/repository/android-ndk-r29-linux.zip
+          sudo unzip -q /tmp/ndk/ndk-r29.zip -d /opt
+          rm -rf /tmp/ndk
+          NDK_PATH=$(find /opt -maxdepth 2 -name "source.properties" -exec dirname {} \;)
+          echo "Discovered NDK at: $NDK_PATH"
+          test -f "$NDK_PATH/build/cmake/android.toolchain.cmake"
+          echo "ANDROID_NDK=$NDK_PATH" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$NDK_PATH" >> "$GITHUB_ENV"
+
+      - name: Prepare dependencies and apply patches
+        run: |
+          python3 tools/setup_repo.py --prepare-only
+          find tools -name "dxc-linux" -exec chmod +x {} + || true
+          mkdir -p tools/local_game_payload
+
+      - name: Configure CMake for Android (arm64-v8a)
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-26 \
+            -DANDROID_STL=c++_static \
+            -DLIBERTY_RECOMP_TARGET_PLATFORM=android \
+            -DLIBERTY_RECOMP_ANDROID_RUNTIME_ASSETS=ON \
+            -DLIBERTY_RECOMP_EMBEDDED_ASSETS=ON \
+            -DLIBERTY_RECOMP_VULKAN=ON \
+            -DREXGLUE_ENABLE_TRACY=OFF \
+            -DCMAKE_BUILD_TYPE=Release > /tmp/cmake.log 2>&1 || {
+              cat /tmp/cmake.log
+              exit 1
+            }
+          cat /tmp/cmake.log
+
+      - name: Build rexgpu-gta4-native target
+        run: |
+          cmake --build build --target rexgpu-gta4-native --parallel $(nproc) > /tmp/build.log 2>&1 || {
+            cat /tmp/build.log
+            exit 1
+          }
+          cat /tmp/build.log
+
+      - name: Strip native library
+        run: |
+          mkdir -p output
+          find . -name "librexgpu-gta4-native.so" -exec cp -v {} output/ \;
+          test -f output/librexgpu-gta4-native.so || { echo "Binary not found!"; exit 1; }
+          $ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-unneeded output/librexgpu-gta4-native.so || true
+          ls -lh output/librexgpu-gta4-native.so
+
+      - name: Package and Sign APK
+        run: |
+          set -e
+          BASE_APK_URL="${{ inputs.base_apk_url || 'https://github.com/Pathansan/LibertyReAnd_PowerVR/releases/download/v0.5.9.3-powervr/liberty_patched.apk' }}"
+          echo "Fetching base APK from $BASE_APK_URL..."
+          curl -sL "$BASE_APK_URL" -o base_input.apk
+          test -f base_input.apk || { echo "Failed to download base APK"; exit 1; }
+
+          echo "Injecting PowerVR-patched librexgpu-gta4-native.so into APK..."
+          python3 - << 'EOF'
+          import zipfile, os
+
+          with zipfile.ZipFile("base_input.apk", "r") as zin:
+              with zipfile.ZipFile("unaligned.apk", "w", compression=zipfile.ZIP_DEFLATED) as zout:
+                  for item in zin.infolist():
+                      # Remove old signatures and old GPU native plugin
+                      if item.filename.startswith("META-INF/") or item.filename == "lib/arm64-v8a/librexgpu-gta4-native.so":
+                          continue
+                      zout.writestr(item, zin.read(item.filename))
+                  # Add the new PowerVR-compatible shared library
+                  zout.write("output/librexgpu-gta4-native.so", "lib/arm64-v8a/librexgpu-gta4-native.so")
+          EOF
+
+          echo "Aligning APK (4-byte boundary)..."
+          zipalign -p -f 4 unaligned.apk aligned.apk
+
+          echo "Generating signing keystore..."
+          keytool -genkeypair -v -keystore /tmp/signing.jks -alias liberty_powervr \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=LibertyRecomp, OU=PowerVR, O=LibertyReAnd, C=US"
+
+          echo "Signing APK with v2 and v3 signatures..."
+          apksigner sign --ks /tmp/signing.jks \
+            --ks-pass pass:android \
+            --ks-key-alias liberty_powervr \
+            --key-pass pass:android \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --out LibertyRecomp-PowerVR.apk aligned.apk
+
+          echo "Verifying APK signature..."
+          apksigner verify --verbose LibertyRecomp-PowerVR.apk
+          ls -lh LibertyRecomp-PowerVR.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LibertyRecomp-PowerVR-APK
+          path: LibertyRecomp-PowerVR.apk
+          retention-days: 14
+
+      - name: Upload APK to GitHub Release (on tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} LibertyRecomp-PowerVR.apk --clobber || true
