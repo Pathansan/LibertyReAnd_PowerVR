@@ -151,10 +151,13 @@ jobs:
 
           gradle_apk = "os/android/app/build/outputs/apk/release/app-release.apk"
           fresh_dex = None
+          fresh_manifest = None
           if os.path.exists(gradle_apk):
-              print(f"Reading freshly compiled classes.dex from {gradle_apk}...")
+              print(f"Reading freshly compiled classes.dex and AndroidManifest.xml from {gradle_apk}...")
               with zipfile.ZipFile(gradle_apk, "r") as zg:
                   fresh_dex = zg.read("classes.dex")
+                  if "AndroidManifest.xml" in zg.namelist():
+                      fresh_manifest = zg.read("AndroidManifest.xml")
               print(f"Extracted fresh classes.dex ({len(fresh_dex):,} bytes)")
           else:
               print(f"WARNING: {gradle_apk} not found, falling back to base classes.dex")
@@ -170,6 +173,9 @@ jobs:
                       if item.filename == "classes.dex" and fresh_dex:
                           print("Injecting freshly compiled classes.dex (with in-launcher FPS toggle)...")
                           zout.writestr(item, fresh_dex)
+                      elif item.filename == "AndroidManifest.xml" and fresh_manifest:
+                          print("Injecting freshly compiled AndroidManifest.xml (v0.5.9.4)...")
+                          zout.writestr(item, fresh_manifest)
                       else:
                           zout.writestr(item, zin.read(item.filename))
                   # Add the new PowerVR-compatible shared library

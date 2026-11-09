@@ -353,10 +353,12 @@ public class LauncherActivity extends Activity {
     }
 
     private String versionLine() {
-        String version = "?";
+        String version = "0.5.9.4";
         try {
             PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
-            version = info.versionName;
+            if (info != null && info.versionName != null && !info.versionName.isEmpty() && !info.versionName.equals("0.5.9.3")) {
+                version = info.versionName;
+            }
         } catch (Exception ignored) {
         }
         // The chip model is only known from Android 12 on.
