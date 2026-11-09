@@ -634,14 +634,21 @@ public class LibertyActivity extends SDLActivity {
                         | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
     }
 
+    static final String EXTRA_SHOW_FPS = "extra_show_fps";
+
     public static native float nativeGetGameFps();
 
     private void setupFpsOverlay() {
         boolean showFps = true;
-        for (String arg : mArguments) {
-            if ("--show_fps=false".equalsIgnoreCase(arg.trim()) || "--no_fps".equalsIgnoreCase(arg.trim())) {
-                showFps = false;
-                break;
+        Intent intent = getIntent();
+        if (intent != null && intent.hasExtra(EXTRA_SHOW_FPS)) {
+            showFps = intent.getBooleanExtra(EXTRA_SHOW_FPS, true);
+        } else {
+            for (String arg : mArguments) {
+                if ("--show_fps=false".equalsIgnoreCase(arg.trim()) || "--no_fps".equalsIgnoreCase(arg.trim())) {
+                    showFps = false;
+                    break;
+                }
             }
         }
         if (!showFps) return;

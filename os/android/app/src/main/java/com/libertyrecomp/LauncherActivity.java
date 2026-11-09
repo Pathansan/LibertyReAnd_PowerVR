@@ -32,6 +32,7 @@ import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Switch;
 
 import org.json.JSONObject;
 
@@ -88,6 +89,7 @@ public class LauncherActivity extends Activity {
     private RadioGroup mDrivers;
     private TextView mDriverNote;
     private android.widget.ImageButton mPlay;
+    private Switch mFpsSwitch;
     private Button mRemove;
     private final List<String> mDriverModes = new ArrayList<>();
     private final Handler mMain = new Handler(Looper.getMainLooper());
@@ -255,6 +257,19 @@ public class LauncherActivity extends Activity {
         LinearLayout.LayoutParams playParams = new LinearLayout.LayoutParams(dp(260), dp(72));
         playParams.topMargin = dp(18);
         left.addView(mPlay, playParams);
+
+        mFpsSwitch = new Switch(this);
+        mFpsSwitch.setText("In-game FPS counter");
+        mFpsSwitch.setTextColor(0xFFCCCCCC);
+        mFpsSwitch.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+        mFpsSwitch.setChecked(getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("show_fps", true));
+        mFpsSwitch.setOnCheckedChangeListener((btn, isChecked) -> {
+            getSharedPreferences("launcher", MODE_PRIVATE).edit().putBoolean("show_fps", isChecked).apply();
+            updateFpsArg(isChecked);
+        });
+        LinearLayout.LayoutParams fpsParams = new LinearLayout.LayoutParams(dp(260), LinearLayout.LayoutParams.WRAP_CONTENT);
+        fpsParams.topMargin = dp(8);
+        left.addView(mFpsSwitch, fpsParams);
 
         Button debugPlay = button("Play (Debug Log)", false);
         debugPlay.setOnClickListener(v -> play(true));
@@ -1215,6 +1230,7 @@ public class LauncherActivity extends Activity {
                 setBusy(false, null);
                 Intent intent = new Intent(this, LibertyActivity.class);
                 if (debugLog) intent.putExtra(LibertyActivity.EXTRA_DEBUG_LOG, true);
+                intent.putExtra(LibertyActivity.EXTRA_SHOW_FPS, mFpsSwitch != null && mFpsSwitch.isChecked());
                 android.content.SharedPreferences perf = perfTestPreferences();
                 intent.putExtra(LibertyActivity.EXTRA_SHADOWS_OFF, perf.getBoolean(PERF_SHADOWS_OFF, false));
                 intent.putExtra(LibertyActivity.EXTRA_HALF_DRAW_DISTANCE,
@@ -1400,5 +1416,18 @@ public class LauncherActivity extends Activity {
         if (children != null) for (File child : children) deleteRecursively(child);
         //noinspection ResultOfMethodCallIgnored
         file.delete();
+    }
+
+    private void updateFpsArg(boolean enabled) {
+        if (mDataRoot == null) return;
+        File argsFile = new File(mDataRoot, "args.txt");
+        if (!argsFile.exists()) return;
+        try {
+            java.util.List<String> lines = new ArrayList<>(java.nio.file.Files.readAllLines(argsFile.toPath(), java.nio.charset.StandardCharsets.UTF_8));
+            lines.removeIf(l -> l.trim().startsWith("--show_fps="));
+            lines.add("--show_fps=" + enabled);
+            java.nio.file.Files.write(argsFile.toPath(), lines, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+        }
     }
 }
