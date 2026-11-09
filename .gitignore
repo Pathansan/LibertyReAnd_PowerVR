@@ -39,6 +39,7 @@ NOTES.md
 # Documentation - Ignore all except build/dump/install/multiplayer guides
 docs/*.md
 !docs/POWERVR_VERTEX_INPUT_LIMIT_FIX.md
+!docs/POWERVR_PERFORMANCE_AND_SETUP_GUIDE.md
 !docs/BUILDING.md
 !docs/MOD_SUPPORT.md
 !docs/DUMPING-en.md
@@ -648,6 +649,7 @@ tools/rage_fxc_extractor/build/
 # Ignore all .md files in docs/ except specific ones
 docs/*.md
 !docs/POWERVR_VERTEX_INPUT_LIMIT_FIX.md
+!docs/POWERVR_PERFORMANCE_AND_SETUP_GUIDE.md
 !docs/BUILDING.md
 !docs/MOD_SUPPORT.md
 !docs/DUMPING-en.md

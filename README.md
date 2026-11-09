@@ -31,7 +31,9 @@ This fork includes full hardware compatibility and pipeline fix for **Imaginatio
 - **Problem**: PowerVR GPUs strictly enforce `VkPhysicalDeviceLimits::maxVertexInputAttributes = 16`. Stock GTA IV ReXGlue shaders emitted sparse attribute locations up to location 31 (for vertex color, skinning blend weights, and texcoords), which crashed pipeline creation on non-Adreno devices.
 - **Fix**: Implemented dynamic SPIR-V vertex input compaction (`native_spirv_vertex_remap.h`) that remaps sparse input locations to dense indices `0..N-1` ($N \le 16$) while preserving original layout binding in `graphics_system`.
 - **Driver**: Set `/sdcard/Android/data/com.libertyrecomp/files/driver.txt` to `system` to use the vendor PowerVR Vulkan driver.
-- **Detailed Documentation**: See [PowerVR Vertex Input Limit Fix](docs/POWERVR_VERTEX_INPUT_LIMIT_FIX.md) for full architecture, code changes, and build instructions.
+- **Detailed Documentation & Performance Guide**: 
+  - [PowerVR Setup, Troubleshooting & Performance Guide](docs/POWERVR_PERFORMANCE_AND_SETUP_GUIDE.md) — Comprehensive guide on everything done to run and optimize the game on Tensor G5 / PowerVR.
+  - [PowerVR Vertex Input Limit Fix](docs/POWERVR_VERTEX_INPUT_LIMIT_FIX.md) — Technical deep-dive on SPIR-V compaction.
 
 ---
 
@@ -93,7 +95,7 @@ Known problems:
 **Not supported:**
 
 - **Samsung Xclipse GPUs** (Exynos 2200 and newer).
-- **PowerVR GPUs**, Huawei Maleoon and anything else that is not an Adreno or a Mali.
+- **PowerVR GPUs (stock upstream)**: Imagination PowerVR D-Series is **supported in this fork**; Huawei Maleoon and other non-standard GPUs remain unsupported.
 
 Why Adreno: the renderer needs Vulkan 1.2 and was tuned on Turnip. Turnip is Mesa's open-source
 Vulkan driver, and it exists only for Adreno GPUs. The stock Qualcomm driver on older devices
