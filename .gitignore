@@ -755,8 +755,6 @@ CMakeUserPresets.json
 !/.github/
 !/.github/workflows/
 /.github/workflows/*
-!/.github/workflows/repository-checks.yml
-!/.github/workflows/build-macos.yml
 !/.github/workflows/build-native.yml
 !/.github/workflows/build-apk.yml
 
