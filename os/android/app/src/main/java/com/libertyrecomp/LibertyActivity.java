@@ -11,6 +11,13 @@ import android.system.Os;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.TypedValue;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
 
 import org.libsdl.app.SDLActivity;
 import org.libsdl.app.SDLSurface;
@@ -92,6 +99,7 @@ public class LibertyActivity extends SDLActivity {
         super.onCreate(savedInstanceState);
         // A controller-driven game sends no touch events for minutes at a time.
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        setupFpsOverlay();
         // Steady clocks the device can hold, instead of peaks followed by
         // throttling (only where the device supports it).
         Intent intent = getIntent();
@@ -624,5 +632,60 @@ public class LibertyActivity extends SDLActivity {
                         | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                         | View.SYSTEM_UI_FLAG_FULLSCREEN
                         | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+    }
+
+    public static native float nativeGetGameFps();
+
+    private void setupFpsOverlay() {
+        boolean showFps = true;
+        for (String arg : mArguments) {
+            if ("--show_fps=false".equalsIgnoreCase(arg.trim()) || "--no_fps".equalsIgnoreCase(arg.trim())) {
+                showFps = false;
+                break;
+            }
+        }
+        if (!showFps) return;
+
+        final TextView fpsView = new TextView(this);
+        fpsView.setText("FPS: --");
+        fpsView.setTextColor(0xFF39FF14);
+        fpsView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+        fpsView.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        fpsView.setPadding(18, 8, 18, 8);
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(0xAA111111);
+        bg.setCornerRadius(12);
+        fpsView.setBackground(bg);
+
+        RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(
+                RelativeLayout.LayoutParams.WRAP_CONTENT,
+                RelativeLayout.LayoutParams.WRAP_CONTENT);
+        lp.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+        lp.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
+        lp.setMargins(28, 28, 0, 0);
+        fpsView.setLayoutParams(lp);
+
+        if (mLayout != null) {
+            mLayout.addView(fpsView);
+        }
+
+        final Handler handler = new Handler(Looper.getMainLooper());
+        final Runnable updateTask = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    float fps = nativeGetGameFps();
+                    if (fps > 0.0f) {
+                        fpsView.setText(String.format(Locale.US, "%.1f FPS", fps));
+                    }
+                } catch (UnsatisfiedLinkError ignored) {
+                }
+                if (!isFinishing() && !isDestroyed()) {
+                    handler.postDelayed(this, 500);
+                }
+            }
+        };
+        handler.postDelayed(updateTask, 1000);
     }
 }

@@ -18,3 +18,6 @@
 --gta4_native_shadow_min_indices=64
 --gta4_native_environment_reflection_interval=2
 --gta4_native_water_reflection_interval=2
+
+# In-game top-left FPS monitor
+--show_fps=true

@@ -6,6 +6,14 @@
 #if defined(__ANDROID__)
 #include <android/log.h>
 #include <pthread.h>
+#include <jni.h>
+#include <atomic>
+namespace rex::graphics::gta4_native {
+inline std::atomic<float> g_native_game_fps{0.0f};
+}
+extern "C" JNIEXPORT jfloat JNICALL Java_com_libertyrecomp_LibertyActivity_nativeGetGameFps(JNIEnv* env, jclass clazz) {
+  return rex::graphics::gta4_native::g_native_game_fps.load(std::memory_order_relaxed);
+}
 #endif
 #include "native_pipeline_stats.h"
 #include "native_gpu_counters.h"
@@ -7343,6 +7351,9 @@ void Gta4NativeGraphicsSystem::UpdateDynamicDrawDistance() {
     fps[2] = fps[1];
     fps[1] = fps[0];
     fps[0] = dynamic_draw_distance_window_frames_ * 1000.0 / dynamic_draw_distance_window_ms_;
+#if defined(__ANDROID__)
+    rex::graphics::gta4_native::g_native_game_fps.store(static_cast<float>(fps[0]), std::memory_order_relaxed);
+#endif
     dynamic_draw_distance_window_frames_ = 0;
     dynamic_draw_distance_window_ms_ = 0.0;
     ++dynamic_draw_distance_windows_since_drop_;
