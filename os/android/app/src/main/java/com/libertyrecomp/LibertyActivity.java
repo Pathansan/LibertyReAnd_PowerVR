@@ -642,6 +642,17 @@ public class LibertyActivity extends SDLActivity {
 
     static final String EXTRA_SHOW_FPS = "extra_show_fps";
 
+    static {
+        try {
+            System.loadLibrary("SDL3");
+            System.loadLibrary("rexruntime");
+            System.loadLibrary("rexgpu-gta4-native");
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public static native float nativeGetGameFps();
+
     private void setupFpsOverlay() {
         boolean showFps = true;
         Intent intent = getIntent();
@@ -682,27 +693,25 @@ public class LibertyActivity extends SDLActivity {
             mLayout.addView(fpsView);
         }
 
-        android.view.Choreographer.getInstance().postFrameCallback(new android.view.Choreographer.FrameCallback() {
-            private int frameCount = 0;
-            private long lastReportNanos = 0;
-
+        final Handler handler = new Handler(Looper.getMainLooper());
+        final Runnable updateTask = new Runnable() {
             @Override
-            public void doFrame(long frameTimeNanos) {
-                if (lastReportNanos == 0) {
-                    lastReportNanos = frameTimeNanos;
-                }
-                frameCount++;
-                long elapsed = frameTimeNanos - lastReportNanos;
-                if (elapsed >= 500_000_000L) {
-                    float currentFps = (float) frameCount * 1_000_000_000.0f / (float) elapsed;
-                    fpsView.setText(String.format(Locale.US, "%.1f FPS", currentFps));
-                    frameCount = 0;
-                    lastReportNanos = frameTimeNanos;
+            public void run() {
+                try {
+                    float fps = nativeGetGameFps();
+                    if (fps > 0.0f) {
+                        fpsView.setText(String.format(Locale.US, "%.1f FPS", fps));
+                    }
+                } catch (Throwable e) {
+                    try {
+                        System.loadLibrary("rexgpu-gta4-native");
+                    } catch (Throwable ignored) {}
                 }
                 if (!isFinishing() && !isDestroyed()) {
-                    android.view.Choreographer.getInstance().postFrameCallback(this);
+                    handler.postDelayed(this, 500);
                 }
             }
-        });
+        };
+        handler.postDelayed(updateTask, 1000);
     }
 }

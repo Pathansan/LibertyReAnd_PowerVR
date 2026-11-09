@@ -45,6 +45,41 @@
 
 #if REX_PLATFORM_ANDROID
 #include <rex/ui/surface_android.h>
+#include <jni.h>
+
+static std::atomic<float> s_game_real_fps{0.0f};
+static uint64_t s_last_fps_calc_tick = 0;
+static uint64_t s_last_present_tick = 0;
+static uint32_t s_fps_presents = 0;
+
+static void RecordVulkanFramePresent() {
+  const uint64_t now = rex::chrono::Clock::QueryHostTickCount();
+  const uint64_t freq = rex::chrono::Clock::QueryHostTickFrequency();
+  s_last_present_tick = now;
+  if (!s_last_fps_calc_tick) {
+    s_last_fps_calc_tick = now;
+    s_fps_presents = 0;
+    return;
+  }
+  s_fps_presents++;
+  const uint64_t elapsed = now - s_last_fps_calc_tick;
+  if (elapsed >= (freq / 2)) {
+    const float fps = float(double(s_fps_presents) * double(freq) / double(elapsed));
+    s_game_real_fps.store(fps, std::memory_order_relaxed);
+    s_fps_presents = 0;
+    s_last_fps_calc_tick = now;
+  }
+}
+
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_libertyrecomp_LibertyActivity_nativeGetGameFps(JNIEnv* /*env*/, jclass /*clazz*/) {
+  const uint64_t now = rex::chrono::Clock::QueryHostTickCount();
+  const uint64_t freq = rex::chrono::Clock::QueryHostTickFrequency();
+  if (s_last_present_tick > 0 && (now - s_last_present_tick) > freq) {
+    return 0.0f;
+  }
+  return s_game_real_fps.load(std::memory_order_relaxed);
+}
 #endif
 #if REX_PLATFORM_GNU_LINUX
 #include <rex/ui/surface_gnulinux.h>
@@ -2961,6 +2996,9 @@ Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(bool execute_ui_draw
                 int(present_result), paint_context_.swapchain_is_fifo);
   }
   if (present_result == VK_SUCCESS || present_result == VK_SUBOPTIMAL_KHR) {
+#if REX_PLATFORM_ANDROID
+    RecordVulkanFramePresent();
+#endif
     const uint64_t publication = guest_output_properties.provenance.publication_serial;
     if (selected_generated_frame && !guest_output_pass_recorded) {
       // A successfully presented fallback clear is not delivery of the pair.
