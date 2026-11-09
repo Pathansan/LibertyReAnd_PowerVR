@@ -136,17 +136,45 @@ jobs:
           curl -sL "$BASE_APK_URL" -o base_input.apk
           test -f base_input.apk || { echo "Failed to download base APK"; exit 1; }
 
-          echo "Injecting PowerVR-patched librexgpu-gta4-native.so into APK..."
+          echo "Injecting PowerVR-patched librexgpu-gta4-native.so and purging third-party toasts from APK..."
           python3 - << 'EOF'
-          import zipfile, os
+          import zipfile, os, hashlib, zlib
 
           with zipfile.ZipFile("base_input.apk", "r") as zin:
               with zipfile.ZipFile("unaligned.apk", "w", compression=zipfile.ZIP_DEFLATED) as zout:
                   for item in zin.infolist():
-                      # Remove old signatures and old GPU native plugin
-                      if item.filename.startswith("META-INF/") or item.filename == "lib/arm64-v8a/librexgpu-gta4-native.so":
+                      # Remove old signatures, old GPU native plugin, and injected APKVision library
+                      if (item.filename.startswith("META-INF/") or 
+                          item.filename == "lib/arm64-v8a/librexgpu-gta4-native.so" or
+                          "apkvision" in item.filename.lower()):
                           continue
-                      zout.writestr(item, zin.read(item.filename))
+                      if item.filename == "classes.dex":
+                          dex = bytearray(zin.read("classes.dex"))
+                          # 1. NOP out the injected APKVision hook in LauncherActivity.onCreate
+                          target_oncreate = b'\x71\x10\x16\x03\x03\x00\x77\x01\xd3\x02\x03\x00'
+                          idx = dex.find(target_oncreate)
+                          if idx != -1:
+                              dex[idx:idx+len(target_oncreate)] = b'\x00' * len(target_oncreate)
+                              print(f"Purged APKVision hook in LauncherActivity.onCreate at offset {idx}")
+                          # 2. Neutralize Main.<clinit> so it never attempts to load libAPKVISION
+                          target_clinit = b'\x22\x00\x79\x01\x13\x01\x09\x00\x23\x11\xe5\x01\x26\x01\x0c\x00\x00\x00\x70\x20\x90\x05\x10\x00\x71\x10\xc6\x05\x00\x00'
+                          idx_cl = dex.find(target_clinit)
+                          if idx_cl != -1:
+                              dex[idx_cl:idx_cl+2] = b'\x0e\x00'  # return-void
+                              dex[idx_cl+2:idx_cl+len(target_clinit)] = b'\x00' * (len(target_clinit) - 2)
+                              print(f"Purged APKVision Main.<clinit> at offset {idx_cl}")
+                          # Blank out leftover literal APKVISION payload bytes
+                          apk_payload_idx = dex.find(b'APKVISION')
+                          if apk_payload_idx != -1:
+                              dex[apk_payload_idx:apk_payload_idx+9] = b'\x00' * 9
+                              print(f"Blanked APKVISION string payload at offset {apk_payload_idx}")
+                          # 3. Recalculate DEX SHA-1 signature and Adler32 checksum
+                          dex[12:32] = hashlib.sha1(dex[32:]).digest()
+                          dex[8:12] = (zlib.adler32(dex[12:]) & 0xffffffff).to_bytes(4, 'little')
+                          zout.writestr(item, dex)
+                          print("Injected clean classes.dex without third-party toast/hooks")
+                      else:
+                          zout.writestr(item, zin.read(item.filename))
                   # Add the new PowerVR-compatible shared library
                   zout.write("output/librexgpu-gta4-native.so", "lib/arm64-v8a/librexgpu-gta4-native.so")
           EOF
