@@ -47,5 +47,34 @@ A typical draw call in GTA IV never uses more than 4–8 active attributes simul
 
 ## 4. Build & Deployment
 * Compiled via GitHub Actions (`.github/workflows/build-native.yml`) using Android NDK r29 targeting `arm64-v8a`.
-* Replaced `lib/arm64-v8a/librexgpu-gta4-native.so` inside the Liberty Recompiled APK (`com.libertyrecomp`).
-* Re-signed using APK Signature Scheme v2/v3 (`sign-apk-py`).
+* DXC upgrade: Linux runner upgraded to Microsoft's official modern release (`DirectXShaderCompiler v1.9.2609`).
+* Profiler config: Built with `-DREXGLUE_ENABLE_TRACY=OFF` to prevent runtime linkage failure against missing `libTracyClient.so`.
+* Stripped binary: Processed with `llvm-strip --strip-unneeded` to reduce library size from ~80MB to 29.5MB.
+* Installed into APK: Replaced `lib/arm64-v8a/librexgpu-gta4-native.so` inside the Liberty Recompiled APK (`com.libertyrecomp`).
+* Re-signed using APK Signature Scheme v2/v3.
+
+## 5. Runtime Configuration & Verification
+
+### A. Driver Selection
+PowerVR GPUs cannot use the bundled Adreno Turnip Mesa driver. The app must be configured to use the system driver:
+* Set `/sdcard/Android/data/com.libertyrecomp/files/driver.txt` to:
+  ```
+  system
+  ```
+  This instructs `LibertyRecomp` to load `/system/lib64/libvulkan.so` (PowerVR D-Series Vulkan Driver 25.3).
+
+### B. Storage Permissions (Android 11 - Android 17 / Scoped Storage)
+When copying or restoring game assets into `/sdcard/Android/data/com.libertyrecomp/files/`, ensure directories have proper read/write permissions for the application UID:
+```bash
+adb shell chmod -R 777 /sdcard/Android/data/com.libertyrecomp/files/
+```
+
+### C. Live Device Verification (Google Pixel 10 Pro XL)
+* **Status**: **VERIFIED & FULLY FUNCTIONAL**
+* **Device**: Google Pixel 10 Pro XL (`mustang`, Android 17 API 37)
+* **GPU**: Imagination PowerVR D-Series `DXT-48-1536 MC1` (driver 25.3)
+* **Results**:
+  - Vulkan swapchain and all pipeline layouts created successfully.
+  - Zero validation errors or crashes during vertex attribute binding.
+  - Intro cutscenes (Platypus cargo ship arriving in Liberty City, Niko Bellic dialogue and animations), character models, skinning, dynamic lighting, and 3D gameplay render cleanly.
+

@@ -23,6 +23,18 @@ Mesa Turnip driver. There is no emulator in between.
 
 This is pure 100% AI slop. I didn't made this by hand at all, it's all thanks to Claude and I, vaduur, take ZERO credit or responsibility of this port being unstable. It will run shitty, that's a guarantee. All I did is spent couple of sleepless night testing and pointing out the issues. Oh, yeah, and spent some pocket change on Claude sub ofc. Please be aware of it and feel free to fork this repo or use it as a reference in your future ReXGlue to Android ports. Thank you and have a nice day.
 
+---
+
+## 🎮 PowerVR / Google Tensor G5 (Pixel 10 Pro XL) Support
+
+This fork includes full hardware compatibility and pipeline fix for **Imagination PowerVR D-Series** GPUs (such as Google Tensor G5 on Pixel 10 Pro XL):
+- **Problem**: PowerVR GPUs strictly enforce `VkPhysicalDeviceLimits::maxVertexInputAttributes = 16`. Stock GTA IV ReXGlue shaders emitted sparse attribute locations up to location 31 (for vertex color, skinning blend weights, and texcoords), which crashed pipeline creation on non-Adreno devices.
+- **Fix**: Implemented dynamic SPIR-V vertex input compaction (`native_spirv_vertex_remap.h`) that remaps sparse input locations to dense indices `0..N-1` ($N \le 16$) while preserving original layout binding in `graphics_system`.
+- **Driver**: Set `/sdcard/Android/data/com.libertyrecomp/files/driver.txt` to `system` to use the vendor PowerVR Vulkan driver.
+- **Detailed Documentation**: See [PowerVR Vertex Input Limit Fix](docs/POWERVR_VERTEX_INPUT_LIMIT_FIX.md) for full architecture, code changes, and build instructions.
+
+---
+
 Issues are closed while the project is on hiatus.
 
 
