@@ -28,11 +28,40 @@ val sdlJavaDir = rootProject.file(
 
     "../../glue/rexglue-sdk-main/thirdparty/sdl3/android-project/app/src/main/java")
 
+// Release signing inputs. The key is never in the repository: point these at a
+// local keystore (gradle.properties) or let CI supply the same values as
+// environment variables. When no keystore is configured the release build is
+// unsigned, which is enough to stage classes.dex/AndroidManifest.xml for
+// build-apk.yml (apksigner signs the final APK there) but is not installable
+// as an update over a signed release. See ../SIGNING.md.
+val releaseStoreFile =
+    ((findProperty("libertyReleaseKeystore") as String?)
+        ?: System.getenv("ANDROID_KEYSTORE_PATH"))
+        ?.let { file(it) }
+        ?.takeIf { it.exists() }
+val releaseStorePassword: String? = (findProperty("libertyReleaseStorePassword") as String?)
+    ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+val releaseKeyAlias: String? = (findProperty("libertyReleaseKeyAlias") as String?)
+    ?: System.getenv("ANDROID_KEY_ALIAS")
+val releaseKeyPassword: String? = (findProperty("libertyReleaseKeyPassword") as String?)
+    ?: System.getenv("ANDROID_KEY_PASSWORD")
+
 android {
 
     namespace   = "com.libertyrecomp"
 
     compileSdk  = 35
+
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
 
     defaultConfig {
 
@@ -68,7 +97,10 @@ android {
 
             isMinifyEnabled = false
 
-            signingConfig   = signingConfigs.getByName("debug")
+            // Never fall back to the debug key: an APK signed with it cannot be
+            // installed over a release-signed one, and CI must sign explicitly.
+            signingConfig = signingConfigs.findByName("release")
+                ?.takeIf { it.storeFile != null }
 
         }
 

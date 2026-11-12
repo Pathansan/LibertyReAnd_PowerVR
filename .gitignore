@@ -798,3 +798,11 @@ CMakeUserPresets.json
 !/tools/tests/test_metal_shader_archive.py
 !/tools/vulkan/*.py
 !/glue/rexglue-sdk-main/cmake/fidelityfx_shader_compiler.py
+
+# Signing material. Never commit these: the release key is supplied to CI as
+# ANDROID_KEYSTORE_BASE64 and lives outside the tree locally.
+*.keystore
+*.jks
+*.p12
+*.pem
+!*.keystore.example

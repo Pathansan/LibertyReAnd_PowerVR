@@ -120,7 +120,8 @@ panel, with FSR's sharpening look.
 | `--gta4_native_water_reflection_min_indices=0` | Default 0 (off). Skips draws with fewer indices than this in the water reflection, for example `300`. Small objects disappear from the reflection; at the bridge the reflection is ~500 mostly small draws. Live. |
 | `--gta4_native_shadow_min_indices=0` | Default 0 (off). Skips draws with fewer indices than this in the shadow map passes. Small objects lose their shadows. Live. |
 | `--gta4_native_vertex_cache_order=true` | Default on. Reorders triangles of opaque draws for the GPU vertex cache on a background thread. Same image, slightly less GPU time. Live. |
-| `--android_pin_hot_threads=false` | Default off. Keeps the busiest threads on the big CPU cores. It made those threads faster on the Retroid Pocket 5 but did not raise the frame rate. Live. |
+| `--gta4_thread_pinning=3` | Default 0 (off). Every two seconds, ranks the process's threads by CPU time and gives the top N (max 4) one big core each, confining the rest to the remaining cores. The tri-cluster pinner, and the one to tune on Tensor G5. Live. |
+| `--android_pin_hot_threads=false` | Default off. Legacy pinner that pins threads by identity. It made those threads faster on the Retroid Pocket 5 but did not raise the frame rate. Superseded by `--gta4_thread_pinning`. Live. |
 | `--install_game_source=PATH` / `--install_update_source=PATH` | Installation sources, instead of the `install/` folder. |
 | `--audio_maxqframes=32` | Audio blocks queued ahead of playback (1-64, each ~5.3 ms), which is also the audio delay. Default 32 (~170 ms) on Android since 0.5.7.7; it was 64 (~340 ms behind the picture). 16 (~85 ms) is tighter but can stutter during frame hitches on slower devices; raise it if the sound crackles. *Restart.* |
 | `--touch_controls=auto` | On-screen controls. `auto` shows them whenever no gamepad is connected, `on` always shows them, `off` never does. |

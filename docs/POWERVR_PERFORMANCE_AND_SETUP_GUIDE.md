@@ -4,6 +4,11 @@ This document is the definitive technical reference for running and optimizing *
 
 If you or a future developer / AI assistant need to revisit this repository, rebuild the code, or troubleshoot a regression, this document outlines every step taken, every bug resolved, and the exact performance tuning parameters.
 
+> **Verified against `15e63c7`.** Two recommendations from earlier revisions were reversed:
+> `gta4_native_fs_relaxed_precision` is now **off** (it caused shadow acne and banding), and
+> CPU pinning uses `gta4_thread_pinning`, not the older `android_pin_hot_threads`.
+> When in doubt, `os/android/app/src/main/assets/default_args.txt` is the shipped truth.
+
 ---
 
 ## 1. What Was Done to Get the Game Running
@@ -67,16 +72,18 @@ Mobile GPUs like the PowerVR DXT use **Tile-Based Deferred Rendering (TBDR)**. T
 
 ### Architectural & Code-Level Optimizations (Zero Visual Compromise)
 
-1. **Tri-Cluster CPU Thread Pinning (`gta4_app.cpp`)**:
+1. **Tri-Cluster CPU Thread Pinning (`android_thread_pinning.cpp`)**:
    - Modern ARM SoCs like the Google Tensor G5 feature a tri-cluster architecture ($1\times$ Cortex-X4 @ 3.78 GHz, $5\times$ Cortex-A725 @ 3.05 GHz, $2\times$ Cortex-A520 @ 2.24 GHz).
-   - `StartHotThreadPinning()` detects the highest frequency prime core and pins the primary Xbox 360 PPC execution loop (`GtaMain`) exclusively to Core 7 (Cortex-X4), while pinning `GtaRecorder` and worker threads to the Cortex-A725 mid cluster. This eliminates core migration latency and L2 cache thrashing.
+   - `gta4_thread_pinning=N` (0 disables, clamped to 4) ranks the process's threads by CPU time over the last two seconds, gives the top `N` one big core each (fastest core first), and confines the rest to the leftover cores. Roles are re-ranked continuously, so loading and cutscene threads follow the work instead of being pinned by name.
+   - The older `android_pin_hot_threads` shortcut pins by thread identity and stays **off**: it made the pinned threads faster on the Adreno 650 handheld but never moved the frame rate.
 
 2. **Pipeline Slack & Decoupled Frame Pacing (`android_frame_wait_hook.cpp`)**:
    - The title engine originally stalls in `sub_82A46D70` whenever more than 2 frames are pending. On Android's multi-threaded command bridge, this 2-frame clamp causes GPU starvation bubbles.
    - Setting `gta4_extra_frames_in_flight = 1` and `gta4_native_max_queued_frames = 3` gives the CPU pipeline headroom to stay 1 frame ahead without stalling on the GPU.
 
-3. **PowerVR Dual-Issue FP16 Math (`graphics_system.cpp`)**:
-   - PowerVR DXT USC clusters feature dual-rate FP16 / FP32 ALUs. Enabling `gta4_native_fs_relaxed_precision = true` compiles pixel shader math into 16-bit half-precision instructions, doubling arithmetic throughput with zero visual artifacts.
+3. **PowerVR FP16 Math — Currently Disabled (`graphics_system.cpp`)**:
+   - PowerVR DXT USC clusters do have dual-rate FP16 / FP32 ALUs, but `gta4_native_fs_relaxed_precision=true` was found to cause shadow acne and banding in GTA IV's shadow and lightmap passes (commit `15e63c7`). It is off by default and should stay off until the affected shaders are identified and excluded from the relaxed path.
+   - Measure before re-enabling: it is not a free 2x on this title.
 
 4. **Skipping Redundant Layout Barriers (`graphics_system.cpp`)**:
    - Enabling `gta4_native_skip_attachment_barriers = true` avoids emitting redundant `vkCmdPipelineBarrier` transitions when attachment images are already in optimal layout, keeping render passes inside on-chip tile memory.
@@ -115,7 +122,7 @@ Create or edit `/sdcard/Android/data/com.libertyrecomp/files/args.txt` with the 
 --gta4_scenario_ped_density_scale=0.40
 
 # PowerVR DXT & Vulkan Architecture Optimizations (Zero visual loss)
---gta4_native_fs_relaxed_precision=true
+--gta4_native_fs_relaxed_precision=false
 --gta4_native_skip_attachment_barriers=true
 --gta4_native_ieee_mul=2
 --gta4_native_max_queued_frames=3
@@ -124,14 +131,15 @@ Create or edit `/sdcard/Android/data/com.libertyrecomp/files/args.txt` with the 
 --gta4_fps_guard=0
 --gta4_frame_limit=30
 --gta4_present_mode=vsync
---android_pin_hot_threads=true
+--gta4_thread_pinning=3
+--android_pin_hot_threads=false
 --show_fps=true
 ```
 
 ### In-Game Display Settings Recommendation
 From the in-game Pause Menu -> **Display**:
 * **Resolution**: 1280x720 (720p) with native display upscaling (matches original Xbox 360 target).
-* **Shadow Quality**: Medium or High (with shadow interval 2 above, performance remains smooth).
+* **Shadow Quality**: Medium or High. The preset above uses shadow interval 1 (minimum quality loss); the shipped `default_args.txt` uses interval 2 with `shadow_distance_scale=0.85` instead and holds 30 FPS more reliably.
 * **Reflections**: Medium.
 * **VSync**: ON (or lock to 30 FPS via `--gta4_fps_guard=30`).
 
@@ -145,5 +153,5 @@ From the in-game Pause Menu -> **Display**:
 | `glue/rexglue-sdk-main/src/graphics/gta4_native/graphics_system.cpp` | Vulkan pipeline creation, draw call batching, and attribute binding. |
 | `glue/rexglue-sdk-main/src/graphics/gta4_native/geometry.h` | Vertex declaration and stream location mapping. |
 | `os/android/app/src/main/assets/default_args.txt` | Default command-line arguments bundled into the APK. |
-| `.github/workflows/build-apk.yml` | GitHub Actions workflow to build, package, and sign the release APK. |
+| `.github/workflows/build-apk.yml` | Patches a prebuilt base APK (code-verified by SHA-256), injects the freshly built `classes.dex`/manifest/`default_args.txt` and the PowerVR `librexgpu-gta4-native.so`, then signs with the release keystore from secrets. |
 | `.github/workflows/build-native.yml` | GitHub Actions workflow to build the standalone `librexgpu-gta4-native.so`. |

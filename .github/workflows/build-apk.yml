@@ -7,11 +7,18 @@ on:
         description: 'URL of the base APK to patch'
         required: false
         default: 'https://github.com/Pathansan/LibertyReAnd_PowerVR/releases/download/v0.5.9.3-powervr/liberty_patched.apk'
+      base_apk_sha256:
+        description: 'Expected SHA-256 of the base APK (update it whenever base_apk_url changes)'
+        required: false
+        default: '6200ad15268fa806fdc509bb0359b4e9b5d262ed5b5aad99456168cc5caa7eb8'
   push:
     branches: [main]
     tags: ['v*']
 
-permissions: write-all
+# Least privilege: the build job only reads the tree. Publishing the APK to a
+# release is a separate job that asks for contents: write on its own.
+permissions:
+  contents: read
 
 jobs:
   build-apk:
@@ -137,22 +144,55 @@ jobs:
           ./gradlew assembleRelease --no-daemon --stacktrace
           ls -lh app/build/outputs/apk/release/
 
-      - name: Package and Sign APK
+      - name: Restore release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           set -e
-          BASE_APK_URL="${{ inputs.base_apk_url || 'https://github.com/Pathansan/LibertyReAnd_PowerVR/releases/download/v0.5.9.3-powervr/liberty_patched.apk' }}"
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not set."
+            echo "Add the base64 of the release keystore as a repository secret, e.g.:"
+            echo "  base64 -w0 ~/keys/liberty_release.keystore"
+            exit 1
+          fi
+          umask 077
+          mkdir -p "$RUNNER_TEMP/signing"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/signing/release.keystore"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/signing/release.keystore" >> "$GITHUB_ENV"
+
+      - name: Package and Sign APK
+        env:
+          BASE_APK_URL: ${{ inputs.base_apk_url || 'https://github.com/Pathansan/LibertyReAnd_PowerVR/releases/download/v0.5.9.3-powervr/liberty_patched.apk' }}
+          BASE_APK_SHA256: ${{ inputs.base_apk_sha256 || '6200ad15268fa806fdc509bb0359b4e9b5d262ed5b5aad99456168cc5caa7eb8' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -e
           echo "Fetching base APK from $BASE_APK_URL..."
-          curl -sL "$BASE_APK_URL" -o base_input.apk
-          test -f base_input.apk || { echo "Failed to download base APK"; exit 1; }
+          curl -sSL --fail "$BASE_APK_URL" -o base_input.apk || { echo "Failed to download base APK"; exit 1; }
+
+          actual=$(sha256sum base_input.apk | cut -d' ' -f1)
+          if [ "$actual" != "$BASE_APK_SHA256" ]; then
+            echo "::error::Base APK checksum mismatch: expected $BASE_APK_SHA256, got $actual"
+            echo "If base_apk_url changed on purpose, pass its real SHA-256 in base_apk_sha256."
+            exit 1
+          fi
+          echo "Base APK checksum verified."
 
           echo "Injecting freshly compiled classes.dex and PowerVR-patched librexgpu-gta4-native.so..."
           python3 - << 'EOF'
           import zipfile, os
 
-          gradle_apk = "os/android/app/build/outputs/apk/release/app-release.apk"
+          gradle_apk = None
+          for candidate in ("os/android/app/build/outputs/apk/release/app-release.apk",
+                            "os/android/app/build/outputs/apk/release/app-release-unsigned.apk"):
+              if os.path.exists(candidate):
+                  gradle_apk = candidate
+                  break
           fresh_dex = None
           fresh_manifest = None
-          if os.path.exists(gradle_apk):
+          if gradle_apk:
               print(f"Reading freshly compiled classes.dex and AndroidManifest.xml from {gradle_apk}...")
               with zipfile.ZipFile(gradle_apk, "r") as zg:
                   fresh_dex = zg.read("classes.dex")
@@ -160,7 +200,7 @@ jobs:
                       fresh_manifest = zg.read("AndroidManifest.xml")
               print(f"Extracted fresh classes.dex ({len(fresh_dex):,} bytes)")
           else:
-              print(f"WARNING: {gradle_apk} not found, falling back to base classes.dex")
+              print("WARNING: no Gradle release APK found, falling back to base classes.dex")
 
           with zipfile.ZipFile("base_input.apk", "r") as zin:
               with zipfile.ZipFile("unaligned.apk", "w", compression=zipfile.ZIP_DEFLATED) as zout:
@@ -189,11 +229,11 @@ jobs:
           echo "Aligning APK (4-byte boundary)..."
           zipalign -p -f 4 unaligned.apk aligned.apk
 
-          echo "Signing APK with consistent keystore (v2 and v3 signatures)..."
-          apksigner sign --ks os/android/app/release.keystore \
-            --ks-pass pass:android \
-            --ks-key-alias liberty_powervr \
-            --key-pass pass:android \
+          echo "Signing APK with the release key (v2 and v3 signatures)..."
+          apksigner sign --ks "$ANDROID_KEYSTORE_PATH" \
+            --ks-pass "env:ANDROID_KEYSTORE_PASSWORD" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --key-pass "env:ANDROID_KEY_PASSWORD" \
             --v2-signing-enabled true \
             --v3-signing-enabled true \
             --out LibertyRecomp-PowerVR.apk aligned.apk
@@ -209,8 +249,20 @@ jobs:
           path: LibertyRecomp-PowerVR.apk
           retention-days: 14
 
-      - name: Upload APK to GitHub Release (on tags only)
-        if: startsWith(github.ref, 'refs/tags/')
+  publish-release:
+    name: Publish APK to GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build-apk
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: LibertyRecomp-PowerVR-APK
+
+      - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: LibertyRecomp-PowerVR.apk
