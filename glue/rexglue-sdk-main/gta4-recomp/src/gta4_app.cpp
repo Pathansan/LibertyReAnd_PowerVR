@@ -904,16 +904,30 @@ void StartHotThreadPinning() {
     }
     if (max_frequency.empty()) return;
     const uint64_t slowest = *std::min_element(max_frequency.begin(), max_frequency.end());
-    cpu_set_t big{}, all{};
-    size_t big_count = 0;
+    const uint64_t fastest = *std::max_element(max_frequency.begin(), max_frequency.end());
+    cpu_set_t big{}, all{}, prime{}, mid{};
+    size_t big_count = 0, prime_count = 0, mid_count = 0;
     for (size_t cpu = 0; cpu < max_frequency.size(); ++cpu) {
       CPU_SET(cpu, &all);
       if (max_frequency[cpu] > slowest) {
         CPU_SET(cpu, &big);
         ++big_count;
+        if (max_frequency[cpu] == fastest && fastest > slowest) {
+          CPU_SET(cpu, &prime);
+          ++prime_count;
+        } else {
+          CPU_SET(cpu, &mid);
+          ++mid_count;
+        }
       }
     }
     if (!big_count) return;  // No big.LITTLE.
+
+    // If there is a distinct prime core (e.g. Cortex-X4 on Tensor G5, Cortex-X3/X2)
+    // and mid cores, we have a tri-cluster SoC. The single hottest thread
+    // (recompiled Xenon PPC game loop) is pinned exclusively to prime, while
+    // other hot threads (recorder, worker, audio) are assigned to mid/big cores.
+    const bool has_tri_cluster = (prime_count > 0 && mid_count > 0);
 
     // CPU ticks (100 Hz) per second a thread needs to be pinned, or to stay.
     constexpr uint64_t kPinTicks = 30, kKeepTicks = 20;
@@ -957,14 +971,24 @@ void StartHotThreadPinning() {
       last_ticks = std::move(ticks);
       std::sort(busy.begin(), busy.end(), std::greater<>());
       std::unordered_set<pid_t> hot;
-      for (const auto& [delta, tid] : busy) {
+      for (size_t i = 0; i < busy.size(); ++i) {
         if (hot.size() == big_count) break;
-        if (delta >= kPinTicks || (delta >= kKeepTicks && pinned.contains(tid))) hot.insert(tid);
+        const auto& [delta, tid] = busy[i];
+        if (delta >= kPinTicks || (delta >= kKeepTicks && pinned.contains(tid))) {
+          hot.insert(tid);
+          if (has_tri_cluster) {
+            if (i < prime_count) {
+              set_affinity(tid, prime);
+            } else {
+              set_affinity(tid, mid);
+            }
+          } else {
+            set_affinity(tid, big);
+          }
+        }
       }
       for (pid_t tid : pinned)
         if (!hot.contains(tid) && last_ticks.contains(tid)) set_affinity(tid, all);
-      for (pid_t tid : hot)
-        if (!pinned.contains(tid)) set_affinity(tid, big);
       pinned = std::move(hot);
     }
   }).detach();

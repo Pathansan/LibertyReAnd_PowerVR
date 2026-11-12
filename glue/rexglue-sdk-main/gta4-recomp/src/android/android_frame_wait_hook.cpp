@@ -24,7 +24,7 @@
 // own guard now.
 REXCVAR_DEFINE_BOOL(gta4_frame_wait_sleep, true, "GTA IV/Performance",
                     "Sleep instead of spinning while the title waits for a frame slot");
-REXCVAR_DEFINE_UINT32(gta4_extra_frames_in_flight, 0, "GTA IV/Performance",
+REXCVAR_DEFINE_UINT32(gta4_extra_frames_in_flight, REX_PLATFORM_ANDROID ? 1 : 0, "GTA IV/Performance",
                       "Frames the title may run ahead beyond its own limit of two pending "
                       "frames (more throughput, one frame of input latency each)")
     .range(0, 2);

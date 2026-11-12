@@ -164,7 +164,7 @@ REXCVAR_DEFINE_BOOL(gta4_native_batched_worker_wake, true, "GTA IV/Graphics/Nati
                     "Wake the render worker per command batch and frame instead of per command");
 REXCVAR_DEFINE_BOOL(gta4_native_pipeline_serialize, false, "GTA IV/Diagnostics",
                     "Wait for each pipelined frame to finish recording before assembling the next");
-REXCVAR_DEFINE_UINT32(gta4_native_max_queued_frames, 2, "GTA IV/Graphics/Native Renderer",
+REXCVAR_DEFINE_UINT32(gta4_native_max_queued_frames, REX_PLATFORM_ANDROID ? 3 : 2, "GTA IV/Graphics/Native Renderer",
                       "Title frames the producer may run ahead of the recorder")
     .range(1, 4);
 REXCVAR_DEFINE_UINT32(gta4_native_frame_complete_signal, 0, "GTA IV/Graphics/Native Renderer",
@@ -176,7 +176,7 @@ REXCVAR_DEFINE_BOOL(gta4_native_constant_align64, true, "GTA IV/Diagnostics",
                     "Align constant arena allocations to 64 bytes (required by uniform banks)");
 REXCVAR_DEFINE_BOOL(gta4_native_ubo_layout, true, "GTA IV/Diagnostics",
                     "Add and bind the uniform constant bank descriptor set");
-REXCVAR_DEFINE_BOOL(gta4_native_skip_attachment_barriers, false, "GTA IV/Graphics/Native Renderer",
+REXCVAR_DEFINE_BOOL(gta4_native_skip_attachment_barriers, REX_PLATFORM_ANDROID ? true : false, "GTA IV/Graphics/Native Renderer",
                     "Skip attachment-to-same-attachment layout barriers between rendering scopes "
                     "(Turnip keeps draw order across scopes)");
 REXCVAR_DEFINE_UINT32(gta4_profile_native_capture_trigger, 0, "GTA IV/Diagnostics",
@@ -378,7 +378,7 @@ REXCVAR_DEFINE_BOOL(gta4_native_early_fragment_tests, true, "GTA IV/Graphics/Nat
                     "Test depth before pixel shading for draws that write neither depth nor "
                     "stencil (identical image; hidden fragments of alpha-tested/killing shaders "
                     "are not shaded)");
-REXCVAR_DEFINE_BOOL(gta4_native_fs_relaxed_precision, false, "GTA IV/Graphics/Native Renderer",
+REXCVAR_DEFINE_BOOL(gta4_native_fs_relaxed_precision, REX_PLATFORM_ANDROID ? true : false, "GTA IV/Graphics/Native Renderer",
                     "Experimental: mark pixel shader arithmetic RelaxedPrecision (FP16 where the "
                     "driver lowers mediump; applies when shaders load)");
 REXCVAR_DEFINE_UINT32(gta4_native_ieee_mul, 2, "GTA IV/Graphics/Native Renderer",
@@ -542,11 +542,11 @@ REXCVAR_DEFINE_BOOL(gta4_native_batch_texture_uploads, true, "GTA IV/Graphics/Na
                     "Batch independent texture uploads before publishing the frame's draw bindings");
 REXCVAR_DEFINE_BOOL(gta4_validate_native_hot_caches, false, "GTA IV/Diagnostics",
                     "Cross-check incremental resource protection and constant uploads against original inputs");
-REXCVAR_DEFINE_BOOL(gta4_profile_native_detailed_gpu, true, "GTA IV/Diagnostics",
+REXCVAR_DEFINE_BOOL(gta4_profile_native_detailed_gpu, false, "GTA IV/Diagnostics",
                     "Enable approximate per-pass timestamps; coarse GPU envelope is cheaper on Metal");
 REXCVAR_DEFINE_BOOL(gta4_profile_native_moltenvk_detailed, false, "GTA IV/Diagnostics",
                     "Opt into perturbing per-range Metal timestamp blits; normally capture only the frame envelope");
-REXCVAR_DEFINE_BOOL(gta4_profile_native_detailed_cpu, true, "GTA IV/Diagnostics",
+REXCVAR_DEFINE_BOOL(gta4_profile_native_detailed_cpu, false, "GTA IV/Diagnostics",
                     "Collect bounded operation-level CPU self/inclusive timings during native capture");
 REXCVAR_DEFINE_UINT32(gta4_profile_native_gpu_query_budget, 512, "GTA IV/Diagnostics",
                       "Maximum timestamp boundaries per sampled frame (more boundaries add GPU overhead)")
@@ -558,7 +558,7 @@ REXCVAR_DEFINE_UINT32(gta4_profile_native_samples, 600, "GTA IV/Diagnostics",
                       "Export the native-renderer numeric profile after this many samples")
     .range(1, rex::graphics::gta4_native::performance::kFrameSampleCapacity);
 REXCVAR_DEFINE_BOOL(
-    gta4_profile_native_autostart, true, "GTA IV/Diagnostics",
+    gta4_profile_native_autostart, false, "GTA IV/Diagnostics",
     "Start native profiling with the first rendered frame; disable to arm it later from LLDB");
 REXCVAR_DEFINE_UINT32(gta4_profile_native_memory_interval_ms, 1000, "GTA IV/Diagnostics",
                       "Wall-clock interval between native-renderer memory samples in milliseconds")
@@ -566,7 +566,7 @@ REXCVAR_DEFINE_UINT32(gta4_profile_native_memory_interval_ms, 1000, "GTA IV/Diag
 REXCVAR_DEFINE_BOOL(
     gta4_profile_native_memory_autostart, false, "GTA IV/Diagnostics",
     "Start native memory profiling with the first rendered frame; disable to control it from LLDB");
-REXCVAR_DEFINE_BOOL(gta4_profile_native_memory_deep, true, "GTA IV/Diagnostics",
+REXCVAR_DEFINE_BOOL(gta4_profile_native_memory_deep, false, "GTA IV/Diagnostics",
                     "Record bounded identity-level renderer resource lifecycle events");
 REXCVAR_DEFINE_UINT32(
     gta4_profile_native_memory_vm_interval_ms, 5000, "GTA IV/Diagnostics",

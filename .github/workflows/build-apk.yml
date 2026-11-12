@@ -176,6 +176,10 @@ jobs:
                       elif item.filename == "AndroidManifest.xml" and fresh_manifest:
                           print("Injecting freshly compiled AndroidManifest.xml (v0.5.9.4)...")
                           zout.writestr(item, fresh_manifest)
+                      elif item.filename == "assets/default_args.txt" and os.path.exists("os/android/app/src/main/assets/default_args.txt"):
+                          print("Injecting optimized default_args.txt...")
+                          with open("os/android/app/src/main/assets/default_args.txt", "rb") as fa:
+                              zout.writestr(item, fa.read())
                       else:
                           zout.writestr(item, zin.read(item.filename))
                   # Add the new PowerVR-compatible shared library
