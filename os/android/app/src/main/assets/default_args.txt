@@ -24,12 +24,12 @@
 --gta4_native_fs_relaxed_precision=false
 --gta4_native_skip_attachment_barriers=false
 --gta4_native_ieee_mul=2
---gta4_native_max_queued_frames=3
---gta4_extra_frames_in_flight=1
+--gta4_native_max_queued_frames=4
+--gta4_extra_frames_in_flight=2
 --gta4_frame_wait_sleep=true
 --gta4_fps_guard=0
 --gta4_frame_limit=30
---gta4_present_mode=vsync
+--gta4_present_mode=mailbox
 
 # In-game top-left FPS monitor
 --show_fps=true
