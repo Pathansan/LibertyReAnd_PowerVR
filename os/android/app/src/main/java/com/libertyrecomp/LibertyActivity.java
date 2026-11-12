@@ -693,25 +693,27 @@ public class LibertyActivity extends SDLActivity {
             mLayout.addView(fpsView);
         }
 
-        final Handler handler = new Handler(Looper.getMainLooper());
-        final Runnable updateTask = new Runnable() {
+        android.view.Choreographer.getInstance().postFrameCallback(new android.view.Choreographer.FrameCallback() {
+            private int frameCount = 0;
+            private long lastReportNanos = 0;
+
             @Override
-            public void run() {
-                try {
-                    float fps = nativeGetGameFps();
-                    if (fps > 0.0f) {
-                        fpsView.setText(String.format(Locale.US, "%.1f FPS", fps));
-                    }
-                } catch (Throwable e) {
-                    try {
-                        System.loadLibrary("rexgpu-gta4-native");
-                    } catch (Throwable ignored) {}
+            public void doFrame(long frameTimeNanos) {
+                if (lastReportNanos == 0) {
+                    lastReportNanos = frameTimeNanos;
+                }
+                frameCount++;
+                long elapsed = frameTimeNanos - lastReportNanos;
+                if (elapsed >= 500_000_000L) {
+                    float currentFps = (float) frameCount * 1_000_000_000.0f / (float) elapsed;
+                    fpsView.setText(String.format(Locale.US, "%.1f FPS", currentFps));
+                    frameCount = 0;
+                    lastReportNanos = frameTimeNanos;
                 }
                 if (!isFinishing() && !isDestroyed()) {
-                    handler.postDelayed(this, 500);
+                    android.view.Choreographer.getInstance().postFrameCallback(this);
                 }
             }
-        };
-        handler.postDelayed(updateTask, 1000);
+        });
     }
 }

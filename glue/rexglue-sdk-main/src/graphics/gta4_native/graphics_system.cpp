@@ -176,7 +176,7 @@ REXCVAR_DEFINE_BOOL(gta4_native_constant_align64, true, "GTA IV/Diagnostics",
                     "Align constant arena allocations to 64 bytes (required by uniform banks)");
 REXCVAR_DEFINE_BOOL(gta4_native_ubo_layout, true, "GTA IV/Diagnostics",
                     "Add and bind the uniform constant bank descriptor set");
-REXCVAR_DEFINE_BOOL(gta4_native_skip_attachment_barriers, REX_PLATFORM_ANDROID ? true : false, "GTA IV/Graphics/Native Renderer",
+REXCVAR_DEFINE_BOOL(gta4_native_skip_attachment_barriers, false, "GTA IV/Graphics/Native Renderer",
                     "Skip attachment-to-same-attachment layout barriers between rendering scopes "
                     "(Turnip keeps draw order across scopes)");
 REXCVAR_DEFINE_UINT32(gta4_profile_native_capture_trigger, 0, "GTA IV/Diagnostics",
@@ -378,7 +378,7 @@ REXCVAR_DEFINE_BOOL(gta4_native_early_fragment_tests, true, "GTA IV/Graphics/Nat
                     "Test depth before pixel shading for draws that write neither depth nor "
                     "stencil (identical image; hidden fragments of alpha-tested/killing shaders "
                     "are not shaded)");
-REXCVAR_DEFINE_BOOL(gta4_native_fs_relaxed_precision, REX_PLATFORM_ANDROID ? true : false, "GTA IV/Graphics/Native Renderer",
+REXCVAR_DEFINE_BOOL(gta4_native_fs_relaxed_precision, false, "GTA IV/Graphics/Native Renderer",
                     "Experimental: mark pixel shader arithmetic RelaxedPrecision (FP16 where the "
                     "driver lowers mediump; applies when shaders load)");
 REXCVAR_DEFINE_UINT32(gta4_native_ieee_mul, 2, "GTA IV/Graphics/Native Renderer",

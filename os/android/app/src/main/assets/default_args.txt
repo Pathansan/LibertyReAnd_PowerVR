@@ -9,9 +9,9 @@
 --gta4_native_upscaler=native
 --gta4_draw_distance_scale=1.0
 --gta4_dynamic_draw_distance=false
---gta4_shadow_distance_scale=1.0
---gta4_native_shadow_interval=1
---gta4_native_shadow_min_indices=0
+--gta4_shadow_distance_scale=0.85
+--gta4_native_shadow_interval=2
+--gta4_native_shadow_min_indices=64
 --gta4_reflection_capture_distance=original
 --gta4_native_environment_reflection_interval=1
 --gta4_native_water_reflection_interval=1
@@ -21,8 +21,8 @@
 --gta4_scenario_ped_density_scale=0.40
 
 # Architecture & Hardware Pipeline Optimizations (Zero Visual Sacrifices)
---gta4_native_fs_relaxed_precision=true
---gta4_native_skip_attachment_barriers=true
+--gta4_native_fs_relaxed_precision=false
+--gta4_native_skip_attachment_barriers=false
 --gta4_native_ieee_mul=2
 --gta4_native_max_queued_frames=3
 --gta4_extra_frames_in_flight=1
