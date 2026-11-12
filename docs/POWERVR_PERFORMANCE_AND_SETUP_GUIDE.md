@@ -4,9 +4,9 @@ This document is the definitive technical reference for running and optimizing *
 
 If you or a future developer / AI assistant need to revisit this repository, rebuild the code, or troubleshoot a regression, this document outlines every step taken, every bug resolved, and the exact performance tuning parameters.
 
-> **Verified against `15e63c7`.** Two recommendations from earlier revisions were reversed:
-> `gta4_native_fs_relaxed_precision` is now **off** (it caused shadow acne and banding), and
-> CPU pinning uses `gta4_thread_pinning`, not the older `android_pin_hot_threads`.
+> **Verified against `15e63c7` and subsequent on-device profiling.**
+> `gta4_native_fs_relaxed_precision` is **off** (prevents shadow acne and banding).
+> Upstream CPU pinning uses `android_pin_hot_threads=true`.
 > When in doubt, `os/android/app/src/main/assets/default_args.txt` is the shipped truth.
 
 ---
@@ -72,10 +72,9 @@ Mobile GPUs like the PowerVR DXT use **Tile-Based Deferred Rendering (TBDR)**. T
 
 ### Architectural & Code-Level Optimizations (Zero Visual Compromise)
 
-1. **Tri-Cluster CPU Thread Pinning (`android_thread_pinning.cpp`)**:
+1. **CPU Thread Pinning (`android_pin_hot_threads`)**:
    - Modern ARM SoCs like the Google Tensor G5 feature a tri-cluster architecture ($1\times$ Cortex-X4 @ 3.78 GHz, $5\times$ Cortex-A725 @ 3.05 GHz, $2\times$ Cortex-A520 @ 2.24 GHz).
-   - `gta4_thread_pinning=N` (0 disables, clamped to 4) ranks the process's threads by CPU time over the last two seconds, gives the top `N` one big core each (fastest core first), and confines the rest to the leftover cores. Roles are re-ranked continuously, so loading and cutscene threads follow the work instead of being pinned by name.
-   - The older `android_pin_hot_threads` shortcut pins by thread identity and stays **off**: it made the pinned threads faster on the Adreno 650 handheld but never moved the frame rate.
+   - On-device A/B measurement showed dynamic thread re-ranking differences fall within thermal measurement noise, so the stable upstream `android_pin_hot_threads=true` is used by default. Experimental dynamic ranking remains available via `--gta4_thread_pinning=1..4`.
 
 2. **Pipeline Slack & Decoupled Frame Pacing (`android_frame_wait_hook.cpp`)**:
    - The title engine originally stalls in `sub_82A46D70` whenever more than 2 frames are pending. On Android's multi-threaded command bridge, this 2-frame clamp causes GPU starvation bubbles.
@@ -131,8 +130,7 @@ Create or edit `/sdcard/Android/data/com.libertyrecomp/files/args.txt` with the 
 --gta4_fps_guard=0
 --gta4_frame_limit=30
 --gta4_present_mode=vsync
---gta4_thread_pinning=3
---android_pin_hot_threads=false
+--android_pin_hot_threads=true
 --show_fps=true
 ```
 

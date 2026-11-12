@@ -7319,16 +7319,6 @@ void Gta4NativeGraphicsSystem::FinishPresent(NativeCommand& command,
 }
 
 void Gta4NativeGraphicsSystem::UpdateDynamicDrawDistance() {
-  // Steers gta4_draw_distance_dynamic_factor from the presented frame rate,
-  // measured over one-second windows. Short streaming hitches and single
-  // missed frames are not draw-distance load and used to swing the factor
-  // between 1.0 and the minimum every ~30 s: it now drops only while two
-  // windows in a row miss the 30 Hz target clearly, in small spaced steps,
-  // and climbs back once the last three seconds average near the target.
-  if (rex::cvar::GetFlagByName("gta4_dynamic_draw_distance") != "true") {
-    dynamic_draw_distance_factor_ = 1.0;
-    return;
-  }
   const uint64_t now = rex::chrono::Clock::QueryHostTickCount();
   const uint64_t frequency = rex::chrono::Clock::QueryHostTickFrequency();
   const uint64_t last = dynamic_draw_distance_last_tick_;
@@ -7338,12 +7328,7 @@ void Gta4NativeGraphicsSystem::UpdateDynamicDrawDistance() {
   if (interval_ms > 250.0) return;  // Loading screens, pauses.
   dynamic_draw_distance_interval_ms_ =
       dynamic_draw_distance_interval_ms_ * 0.9 + std::min(interval_ms, 100.0) * 0.1;
-  double minimum = 0.7;
-  try {
-    minimum = std::clamp(std::stod(rex::cvar::GetFlagByName("gta4_dynamic_draw_distance_min")), 0.25, 1.0);
-  } catch (...) {
-  }
-  double factor = dynamic_draw_distance_factor_;
+
   ++dynamic_draw_distance_window_frames_;
   dynamic_draw_distance_window_ms_ += std::min(interval_ms, 100.0);
   if (dynamic_draw_distance_window_ms_ >= 1000.0) {
@@ -7357,23 +7342,35 @@ void Gta4NativeGraphicsSystem::UpdateDynamicDrawDistance() {
     dynamic_draw_distance_window_frames_ = 0;
     dynamic_draw_distance_window_ms_ = 0.0;
     ++dynamic_draw_distance_windows_since_drop_;
-    if (fps[0] < 27.0 && fps[1] < 27.0) {
-      if (dynamic_draw_distance_windows_since_drop_ >= 2) {
-        factor -= 0.05;
-        dynamic_draw_distance_windows_since_drop_ = 0;
+    if (rex::cvar::GetFlagByName("gta4_dynamic_draw_distance") == "true") {
+      double minimum = 0.7;
+      try {
+        minimum = std::clamp(std::stod(rex::cvar::GetFlagByName("gta4_dynamic_draw_distance_min")), 0.25, 1.0);
+      } catch (...) {
       }
-    } else if (dynamic_draw_distance_windows_since_drop_ >= 10 &&
-               (fps[0] + fps[1] + fps[2]) / 3.0 >= 28.5) {
-      factor += 0.02;
+      double factor = dynamic_draw_distance_factor_;
+      if (fps[0] < 27.0 && fps[1] < 27.0) {
+        if (dynamic_draw_distance_windows_since_drop_ >= 2) {
+          factor -= 0.05;
+          dynamic_draw_distance_windows_since_drop_ = 0;
+        }
+      } else if (dynamic_draw_distance_windows_since_drop_ >= 10 &&
+                 (fps[0] + fps[1] + fps[2]) / 3.0 >= 28.5) {
+        factor += 0.02;
+      }
+      factor = std::clamp(factor, minimum, 1.0);
+      dynamic_draw_distance_factor_ = factor;
+    } else {
+      dynamic_draw_distance_factor_ = 1.0;
     }
   }
-  factor = std::clamp(factor, minimum, 1.0);
-  UpdateFpsGuard(dynamic_draw_distance_interval_ms_, now, frequency);
-  if (std::abs(factor - dynamic_draw_distance_published_) >= 0.0099) {
-    rex::cvar::SetFlagByName("gta4_draw_distance_dynamic_factor", fmt::format("{:.3f}", factor));
-    dynamic_draw_distance_published_ = factor;
+  if (rex::cvar::GetFlagByName("gta4_dynamic_draw_distance") == "true") {
+    UpdateFpsGuard(dynamic_draw_distance_interval_ms_, now, frequency);
+    if (std::abs(dynamic_draw_distance_factor_ - dynamic_draw_distance_published_) >= 0.0099) {
+      rex::cvar::SetFlagByName("gta4_draw_distance_dynamic_factor", fmt::format("{:.3f}", dynamic_draw_distance_factor_));
+      dynamic_draw_distance_published_ = dynamic_draw_distance_factor_;
+    }
   }
-  dynamic_draw_distance_factor_ = factor;
 }
 
 void Gta4NativeGraphicsSystem::ApplyFpsGuardLevel(uint32_t level) {
