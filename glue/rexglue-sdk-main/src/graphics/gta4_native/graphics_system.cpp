@@ -10,6 +10,7 @@
 #include <jni.h>
 #include <atomic>
 #include <cstdio>
+#include <cerrno>
 namespace rex::graphics::gta4_native {
 inline std::atomic<float> g_native_game_fps{0.0f};
 
@@ -32,17 +33,17 @@ inline int FindPrimeCpuCore() {
   return best_cpu;
 }
 
-inline void EnsurePinnedToCore(int cpu) {
-  if (cpu < 0) return;
+inline int EnsurePinnedToCore(int cpu) {
+  if (cpu < 0) return -1;
   cpu_set_t current{};
   if (sched_getaffinity(0, sizeof(current), &current) == 0 &&
       CPU_COUNT(&current) == 1 && CPU_ISSET(cpu, &current)) {
-    return;
+    return 0;
   }
   cpu_set_t target{};
   CPU_ZERO(&target);
   CPU_SET(cpu, &target);
-  sched_setaffinity(0, sizeof(target), &target);
+  return sched_setaffinity(0, sizeof(target), &target);
 }
 }
 extern "C" JNIEXPORT jfloat JNICALL Java_com_libertyrecomp_LibertyActivity_nativeGetGameFps(JNIEnv* env, jclass clazz) {
@@ -7488,15 +7489,12 @@ void Gta4NativeGraphicsSystem::FrameRecorderMain() {
 #if REX_PLATFORM_ANDROID
   pthread_setname_np(pthread_self(), "GtaRecorder");
   const int prime_cpu = FindPrimeCpuCore();
-  EnsurePinnedToCore(prime_cpu);
-  uint32_t pin_check_counter = 0;
+  const int pin_rc = EnsurePinnedToCore(prime_cpu);
+  REXLOG_WARN("gta4-native-recorder-pin: prime_cpu={} set_rc={} errno={}", prime_cpu, pin_rc, errno);
 #endif
   while (true) {
 #if REX_PLATFORM_ANDROID
-    if (++pin_check_counter >= 60) {
-      pin_check_counter = 0;
-      EnsurePinnedToCore(prime_cpu);
-    }
+    EnsurePinnedToCore(prime_cpu);
 #endif
     std::optional<NativeRecorderJob> job;
     {
@@ -37874,6 +37872,15 @@ bool Gta4NativeGraphicsSystem::ClearGuestOutput(
         if (native_profile_frame_started) {
           native_gpu_profile_state_.frames[active_frame_slot_].cpu_finalize_ticks =
               rex::chrono::Clock::QueryHostTickCount() - native_profile_finalize_begin;
+          if (REXCVAR_GET(gta4_profile_native_detailed_cpu) && (submitted_frame % 60 == 0)) {
+            const double freq = double(rex::chrono::Clock::QueryHostTickFrequency());
+            const auto& pf = native_gpu_profile_state_.frames[active_frame_slot_];
+            REXLOG_WARN("gta4-native-recorder-ms: frame={} tex_prep={:.2f} record={:.2f} finalize={:.2f}",
+                        submitted_frame,
+                        1000.0 * double(pf.cpu_texture_prepare_ticks) / freq,
+                        1000.0 * double(pf.cpu_record_ticks) / freq,
+                        1000.0 * double(pf.cpu_finalize_ticks) / freq);
+          }
         }
 
         VkSubmitInfo submit_info{};
