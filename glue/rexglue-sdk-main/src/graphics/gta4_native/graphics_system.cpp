@@ -6,10 +6,44 @@
 #if defined(__ANDROID__)
 #include <android/log.h>
 #include <pthread.h>
+#include <sched.h>
 #include <jni.h>
 #include <atomic>
+#include <cstdio>
 namespace rex::graphics::gta4_native {
 inline std::atomic<float> g_native_game_fps{0.0f};
+
+inline int FindPrimeCpuCore() {
+  int best_cpu = -1;
+  long best_khz = -1;
+  for (int cpu = 0; cpu < 64; ++cpu) {
+    char path[96];
+    std::snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq", cpu);
+    FILE* f = std::fopen(path, "r");
+    if (!f) continue;
+    long khz = 0;
+    const int ok = std::fscanf(f, "%ld", &khz);
+    std::fclose(f);
+    if (ok == 1 && khz >= best_khz) {
+      best_khz = khz;
+      best_cpu = cpu;
+    }
+  }
+  return best_cpu;
+}
+
+inline void EnsurePinnedToCore(int cpu) {
+  if (cpu < 0) return;
+  cpu_set_t current{};
+  if (sched_getaffinity(0, sizeof(current), &current) == 0 &&
+      CPU_COUNT(&current) == 1 && CPU_ISSET(cpu, &current)) {
+    return;
+  }
+  cpu_set_t target{};
+  CPU_ZERO(&target);
+  CPU_SET(cpu, &target);
+  sched_setaffinity(0, sizeof(target), &target);
+}
 }
 extern "C" JNIEXPORT jfloat JNICALL Java_com_libertyrecomp_LibertyActivity_nativeGetGameFps(JNIEnv* env, jclass clazz) {
   return rex::graphics::gta4_native::g_native_game_fps.load(std::memory_order_relaxed);
@@ -7453,8 +7487,17 @@ void Gta4NativeGraphicsSystem::SignalGuestFrameComplete(uint32_t device, uint32_
 void Gta4NativeGraphicsSystem::FrameRecorderMain() {
 #if REX_PLATFORM_ANDROID
   pthread_setname_np(pthread_self(), "GtaRecorder");
+  const int prime_cpu = FindPrimeCpuCore();
+  EnsurePinnedToCore(prime_cpu);
+  uint32_t pin_check_counter = 0;
 #endif
   while (true) {
+#if REX_PLATFORM_ANDROID
+    if (++pin_check_counter >= 60) {
+      pin_check_counter = 0;
+      EnsurePinnedToCore(prime_cpu);
+    }
+#endif
     std::optional<NativeRecorderJob> job;
     {
       std::unique_lock lock(frame_recorder_mutex_);
@@ -31330,6 +31373,9 @@ bool Gta4NativeGraphicsSystem::RecordNativeFrame(
     if (const auto* state = ahead.pipeline_state.get()) __builtin_prefetch(state);
     if (const auto* state = ahead.shader_state.get()) __builtin_prefetch(state);
   };
+  const std::string ps9_stencil_probe = REXCVAR_GET(gta4_native_light_ps9_stencil_probe);
+  const bool legacy_ps9_bypass = REXCVAR_GET(gta4_native_light_ps9_stencil_bypass);
+  const bool ps9_probe_non_original = ps9_stencil_probe != "original";
   for (size_t command_index = 0; command_index < current_frame_.size(); ++command_index) {
     breadcrumb_command = command_index;
     if (prefetch_commands) {
@@ -31449,8 +31495,8 @@ bool Gta4NativeGraphicsSystem::RecordNativeFrame(
     const NativeCommand* command_pointer = &queued_command;
     constexpr uint64_t kDeferredLightingPs9Hash = 0x23C88DA6F953E36Bull;
     constexpr uint32_t kFillerVolumePointTechnique = 11;
-    const std::string ps9_stencil_probe = REXCVAR_GET(gta4_native_light_ps9_stencil_probe);
     const bool ps9_accumulation_draw =
+        (legacy_ps9_bypass || ps9_probe_non_original) &&
         queued_command.light_trace_technique == kFillerVolumePointTechnique &&
         queued_command.light_trace_mode == 0 && queued_command.pipeline_state &&
         queued_command.pipeline_state->vertex_shader_resource &&
@@ -31467,9 +31513,8 @@ bool Gta4NativeGraphicsSystem::RecordNativeFrame(
         ps9_probe_instance = StableDeferredLocalLightInstanceId(*vertex_constants, *constant_base);
       }
     }
-    const bool legacy_ps9_bypass = REXCVAR_GET(gta4_native_light_ps9_stencil_bypass);
     const bool targeted_ps9_probe =
-        ps9_probe_instance == kApartmentBulbX890Instance && ps9_stencil_probe != "original";
+        ps9_probe_instance == kApartmentBulbX890Instance && ps9_probe_non_original;
     if (ps9_accumulation_draw && (legacy_ps9_bypass || targeted_ps9_probe)) {
       light_stencil_bypass_command.emplace(queued_command);
       NativeFixedFunctionState& fixed = light_stencil_bypass_command->fixed_function_state;

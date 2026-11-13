@@ -34,5 +34,7 @@
 # In-game top-left FPS monitor
 --show_fps=true
 
-# CPU core pinning: upstream hot-thread pinning
---android_pin_hot_threads=true
+# CPU core pinning: dedicated core isolation + disable ADPF downclocking/migration
+--android_pin_hot_threads=false
+--gta4_thread_pinning=3
+--android_perf_hint=false
